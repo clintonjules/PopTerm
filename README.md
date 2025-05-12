@@ -1,14 +1,41 @@
 # PopTerm
 
-A modern, minimal popup terminal interface built with Electron, React, and TypeScript.
+A modern, minimal popup terminal interface built with Electron, React, and TypeScript, designed for macOS, Linux, and Windows.
 
 ## Features
 
 - Clean, minimal UI with just a command input
-- Output is only shown when the user clicks the down arrow
+- Output is only shown when needed and can be expanded/collapsed
 - Compact, transparent, borderless window that can be dragged anywhere
-- Cross-platform support (macOS, Windows, Linux)
-- Keyboard shortcuts (Cmd/Ctrl+Q to quit)
+- Native menu integration across all platforms
+- Dark and light mode support with system theme detection
+- Tab completion for commands and file paths
+- Command history navigation with arrow keys
+- Configurable settings that persist between sessions
+- Cross-platform compatibility (macOS, Linux, Windows)
+
+## Settings
+
+PopTerm offers a settings window where you can customize:
+
+- Theme (Light, Dark, or System)
+
+Access the settings through:
+- The PopTerm menu in the menu bar (Preferences option)
+- Keyboard shortcut: Cmd+, (macOS) or Ctrl+, (Linux/Windows)
+
+## Keyboard Shortcuts
+
+- **Cmd/Ctrl+,**: Open settings
+- **Cmd/Ctrl+K**: Clear terminal
+- **Cmd/Ctrl+W**: Hide window
+- **Cmd/Ctrl+Q**: Quit the application
+- **Cmd/Ctrl+O**: Toggle output display
+- **Cmd/Ctrl+=**: Zoom in
+- **Cmd/Ctrl+-**: Zoom out
+- **Cmd/Ctrl+0**: Reset zoom
+- **Tab**: Complete command or path
+- **Up/Down arrows**: Navigate command history
 
 ## Development
 
@@ -21,8 +48,8 @@ A modern, minimal popup terminal interface built with Electron, React, and TypeS
 
 1. Clone the repository:
 ```
-git clone https://github.com/yourusername/popterm.git
-cd popterm
+git clone https://github.com/clintonjules/PopTerm.git
+cd PopTerm
 ```
 
 2. Install dependencies:
@@ -58,6 +85,16 @@ This will create distributables for macOS, Windows, and Linux in the `dist` dire
 PopTerm provides a simple interface to your system's native terminal:
 
 1. Enter a command in the input field and press Enter
-2. The command is sent to your system's shell (bash on macOS/Linux, PowerShell on Windows)
+2. The command is sent to your system's shell (bash/zsh on macOS and Linux, PowerShell/CMD on Windows)
 3. Click the down arrow to expand the output area and see the results
 4. Click the arrow again to collapse the output and return to the minimal interface
+5. The current working directory is tracked between commands
+
+## Technical Details
+
+- Built with Electron for cross-platform desktop capabilities
+- React with TypeScript for UI components and type safety
+- Styled Components for theming and styling
+- IPC communication between Electron main and renderer processes
+- Native menu integration across all supported platforms
+- Platform-specific optimizations for macOS, Linux, and Windows

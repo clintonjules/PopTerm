@@ -1,5 +1,5 @@
 {
-  "name": "popterm",
+  "name": "PopTerm",
   "version": "1.0.0",
   "description": "A minimal popup terminal",
   "main": "dist/main.js",
@@ -28,6 +28,7 @@
     "electron-builder": "^26.0.12",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.0",
+    "html-webpack-plugin": "^5.6.3",
     "style-loader": "^3.3.3",
     "ts-loader": "^9.5.1",
     "webpack": "^5.90.3",

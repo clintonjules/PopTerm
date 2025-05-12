@@ -1,18 +1,27 @@
 import React, { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import styled, { createGlobalStyle, css } from 'styled-components';
+import styled, { createGlobalStyle, css, ThemeProvider } from 'styled-components';
 import { ipcRenderer } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 
+enum Theme {
+  LIGHT = 'light',
+  DARK = 'dark',
+  SYSTEM = 'system'
+}
 
-const GlobalStyle = createGlobalStyle<{ $scale: number }>`
+interface Settings {
+  theme: Theme;
+}
+
+const GlobalStyle = createGlobalStyle<{ $scale: number; $theme: Theme }>`
   :root {
-    --bg-color: rgba(30, 30, 30, 0.8);
-    --bg-color-translucent: rgba(30, 30, 30, 0.5);
-    --border-color: #444;
-    --text-color: #ddd;
-    --accent-color: #6adf91;
-    --error-color: #ff6b6b;
+    --bg-color: ${props => props.$theme === Theme.LIGHT ? 'rgba(240, 240, 240, 0.8)' : 'rgba(30, 30, 30, 0.8)'};
+    --bg-color-translucent: ${props => props.$theme === Theme.LIGHT ? 'rgba(240, 240, 240, 0.5)' : 'rgba(30, 30, 30, 0.5)'};
+    --border-color: ${props => props.$theme === Theme.LIGHT ? '#ccc' : '#444'};
+    --text-color: ${props => props.$theme === Theme.LIGHT ? '#333' : '#ddd'};
+    --accent-color: ${props => props.$theme === Theme.LIGHT ? '#4a8f69' : '#6adf91'};
+    --error-color: ${props => props.$theme === Theme.LIGHT ? '#e74c3c' : '#ff6b6b'};
     --scale-factor: ${props => props.$scale};
     --font-size-base: calc(14px * var(--scale-factor));
     --font-size-small: calc(12px * var(--scale-factor));
@@ -21,17 +30,204 @@ const GlobalStyle = createGlobalStyle<{ $scale: number }>`
   * {
     font-size: var(--font-size-base);
   }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
 `;
 
+const SettingsOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+`;
+
+const SettingsDialog = styled.div`
+  background-color: var(--bg-color);
+  border-radius: 8px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+`;
+
+const SettingsHeader = styled.div`
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const SettingsTitle = styled.h2`
+  margin: 0;
+  color: var(--text-color);
+  font-size: 18px;
+`;
+
+const CloseButton = styled.button`
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  
+  &:hover {
+    color: var(--accent-color);
+  }
+`;
+
+const SettingsContent = styled.div`
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const SettingsGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const SettingsLabel = styled.label`
+  color: var(--text-color);
+  font-weight: bold;
+`;
+
+const SettingsInput = styled.input`
+  background-color: ${props => props.theme === Theme.LIGHT ? '#fff' : 'rgba(50, 50, 50, 0.8)'};
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 8px 12px;
+  border-radius: 4px;
+  outline: none;
+  
+  &:focus {
+    border-color: var(--accent-color);
+  }
+`;
+
+const SettingsSelect = styled.select`
+  background-color: ${props => props.theme === Theme.LIGHT ? '#fff' : 'rgba(50, 50, 50, 0.8)'};
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 8px 12px;
+  border-radius: 4px;
+  outline: none;
+  
+  &:focus {
+    border-color: var(--accent-color);
+  }
+`;
+
+const SettingsFooter = styled.div`
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+`;
+
+const SettingsButton = styled.button`
+  background-color: var(--accent-color);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  
+  &:hover {
+    opacity: 0.9;
+  }
+  
+  &:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+`;
+
+const CancelButton = styled(SettingsButton)`
+  background-color: transparent;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+`;
+
+interface SettingsDialogProps {
+  settings: Settings;
+  onSave: (settings: Settings) => void;
+  onClose: () => void;
+}
+
+const SettingsDialogComponent: React.FC<SettingsDialogProps> = ({ settings, onSave, onClose }) => {
+  const [theme, setTheme] = useState(settings.theme);
+  
+  const handleSave = () => {
+    onSave({
+      theme
+    });
+  };
+  
+  return (
+    <SettingsOverlay onClick={e => e.target === e.currentTarget && onClose()}>
+      <SettingsDialog>
+        <SettingsHeader>
+          <SettingsTitle>Settings</SettingsTitle>
+          <CloseButton onClick={onClose}>×</CloseButton>
+        </SettingsHeader>
+        <SettingsContent>
+          <SettingsGroup>
+            <SettingsLabel>Theme</SettingsLabel>
+            <SettingsSelect 
+              value={theme} 
+              onChange={e => setTheme(e.target.value as Theme)}
+            >
+              <option value={Theme.LIGHT}>Light</option>
+              <option value={Theme.DARK}>Dark</option>
+              <option value={Theme.SYSTEM}>System (follow OS)</option>
+            </SettingsSelect>
+          </SettingsGroup>
+        </SettingsContent>
+        <SettingsFooter>
+          <CancelButton onClick={onClose}>Cancel</CancelButton>
+          <SettingsButton onClick={handleSave}>Save</SettingsButton>
+        </SettingsFooter>
+      </SettingsDialog>
+    </SettingsOverlay>
+  );
+};
 
 interface DragHandleProps {
   $expanded: boolean;
+  theme: Theme;
 }
 
 const DragHandle = styled.div<DragHandleProps>`
   width: 15px;
   height: 100%;
-  background-color: rgba(50, 50, 50, 0.8);
+  background-color: ${props => props.theme === Theme.LIGHT ? 'rgba(200, 200, 200, 0.8)' : 'rgba(50, 50, 50, 0.8)'};
   cursor: grab;
   -webkit-app-region: drag;
   display: flex;
@@ -40,7 +236,7 @@ const DragHandle = styled.div<DragHandleProps>`
   justify-content: center;
   
   &:hover {
-    background-color: rgba(70, 70, 70, 0.8);
+    background-color: ${props => props.theme === Theme.LIGHT ? 'rgba(180, 180, 180, 0.8)' : 'rgba(70, 70, 70, 0.8)'};
   }
   
   &::after {
@@ -48,7 +244,7 @@ const DragHandle = styled.div<DragHandleProps>`
     width: 2px;
     height: ${props => props.$expanded ? "60px" : "20px"};
     transition: height 0.1s ease;
-    background-color: #666;
+    background-color: ${props => props.theme === Theme.LIGHT ? '#999' : '#666'};
     border-radius: 4px;
   }
 `;
@@ -99,13 +295,13 @@ const AutocompleteItem = styled.div<{ $isSelected: boolean }>`
   padding: 6px 12px;
   cursor: pointer;
   color: ${props => props.$isSelected ? '#fff' : 'var(--text-color)'};
-  background-color: ${props => props.$isSelected ? 'rgba(70, 70, 70, 0.8)' : 'transparent'};
+  background-color: ${props => props.$isSelected ? 'var(--accent-color)' : 'transparent'};
   display: flex;
   justify-content: space-between;
   align-items: center;
   
   &:hover {
-    background-color: rgba(60, 60, 60, 0.8);
+    background-color: ${props => props.$isSelected ? 'var(--accent-color)' : 'rgba(128, 128, 128, 0.2)'};
   }
   
   .directory {
@@ -119,14 +315,14 @@ const AutocompleteItem = styled.div<{ $isSelected: boolean }>`
   .tab-icon {
     opacity: ${props => props.$isSelected ? 1 : 0};
     font-size: 12px;
-    color: #999;
+    color: ${props => props.$isSelected ? '#fff' : '#999'};
     display: flex;
     align-items: center;
     margin-left: 8px;
   }
   
   .tab-key {
-    border: 1px solid #666;
+    border: 1px solid ${props => props.$isSelected ? '#fff' : '#666'};
     border-radius: 3px;
     padding: 1px 4px;
     font-size: 10px;
@@ -162,7 +358,7 @@ const Input = styled.input`
   flex: 1;
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: var(--text-color);
   font-size: var(--font-size-base);
   outline: none;
   font-family: inherit;
@@ -173,6 +369,12 @@ const Input = styled.input`
   line-height: normal;
   vertical-align: middle;
   padding: 0;
+  caret-color: var(--accent-color);
+  
+  &::placeholder {
+    color: var(--text-color);
+    opacity: 0.5;
+  }
 `;
 
 interface ToggleButtonProps {
@@ -189,9 +391,10 @@ const ToggleButton = styled.button<ToggleButtonProps>`
   transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   outline: none;
   -webkit-app-region: no-drag;
+  font-size: 14px;
   
   &:hover {
-    color: ${props => props.$hasOutput ? '#fff' : '#555'};
+    color: ${props => props.$hasOutput ? 'var(--accent-color)' : '#555'};
   }
 `;
 
@@ -223,6 +426,17 @@ const OutputText = styled.pre`
   white-space: pre-wrap;
   word-break: break-all;
   line-height: 1.2em;
+  
+  .cursor {
+    color: var(--accent-color);
+    font-weight: bold;
+    animation: blink 1s step-end infinite;
+  }
+  
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
 `;
 
 const StdoutText = styled.span`
@@ -261,10 +475,54 @@ const App: React.FC = () => {
   
   const [scale, setScale] = useState(1);
   
+  const [settings, setSettings] = useState<Settings>({
+    theme: Theme.DARK
+  });
+  
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>('dark');
+  const actualTheme = settings.theme === Theme.SYSTEM 
+    ? (systemTheme === 'light' ? Theme.LIGHT : Theme.DARK)
+    : settings.theme;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
+    setSystemTheme(mediaQuery.matches ? 'light' : 'dark');
+    
+    const handler = (e: MediaQueryListEvent) => {
+      setSystemTheme(e.matches ? 'light' : 'dark');
+    };
+    
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
   
+  useEffect(() => {
+    try {
+      const savedSettings = localStorage.getItem('popterm-settings');
+      if (savedSettings) {
+        const parsedSettings = JSON.parse(savedSettings);
+        setSettings(parsedSettings);
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleSettingsUpdated = (_: any, newSettings: Settings) => {
+      setSettings(newSettings);
+    };
+    
+    ipcRenderer.on('settings-updated', handleSettingsUpdated);
+    
+    return () => {
+      ipcRenderer.removeListener('settings-updated', handleSettingsUpdated);
+    };
+  }, []);
+
   const hasOutput = outputLines.length > 0 || isExecuting;
 
   
@@ -291,9 +549,12 @@ const App: React.FC = () => {
 
   const clearOutput = () => {
     setOutputLines([]);
-    
+    setCommand('');
     if (expanded) {
       setExpanded(false);
+    }
+    if (inputRef.current) {
+      inputRef.current.focus();
     }
   };
 
@@ -602,9 +863,9 @@ const App: React.FC = () => {
 
   return (
     <>
-      <GlobalStyle $scale={scale} />
+      <GlobalStyle $scale={scale} $theme={actualTheme} />
       <Container>
-        <DragHandle $expanded={expanded && hasOutput} />
+        <DragHandle $expanded={expanded && hasOutput} theme={actualTheme} />
         <ContentContainer>
           <InputContainer $expanded={expanded && hasOutput}>
             <Prompt>{getDirectoryName()} $</Prompt>
@@ -658,7 +919,6 @@ const App: React.FC = () => {
               ref={outputRef} 
               $expanded={expanded}
               onClick={(e) => {
-                
                 if (window.getSelection()?.toString() === '') {
                   if (inputRef.current) {
                     inputRef.current.focus();
@@ -672,7 +932,7 @@ const App: React.FC = () => {
                     ? <StdoutText key={index}>{line.content}</StdoutText>
                     : <StderrText key={index}>{line.content}</StderrText>
                 ))}
-                {isExecuting && <span className="cursor">_</span>}
+                {isExecuting && <span className="cursor">█</span>}
               </OutputText>
             </OutputContainer>
           )}

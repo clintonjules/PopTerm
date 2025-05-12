@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings</title>
+  <script>
+    (function() {
+      try {
+        const savedSettings = localStorage.getItem('popterm-settings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          const isDarkTheme = settings.theme === 'dark' || 
+            (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          
+          if (isDarkTheme) {
+            document.documentElement.classList.add('dark-theme-init');
+          }
+        }
+      } catch (e) {
+      }
+    })();
+  </script>
+  <style>
+    .dark-theme-init {
+      background-color: #222;
+      color: #eee;
+    }
+    
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #333;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    
+    .dark-theme-init body {
+      background-color: #222;
+      color: #eee;
+    }
+    
+    .dark-mode {
+      background-color: #222;
+      color: #eee;
+    }
+    
+    .settings-container {
+      max-width: 100%;
+      margin: 0;
+      background-color: #fff;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    
+    .dark-mode .settings-container {
+      background-color: #333;
+    }
+    
+    .settings-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      padding: 16px 20px;
+      border-bottom: 1px solid #ddd;
+      color: #333;
+    }
+    
+    .dark-mode .settings-title {
+      border-bottom: 1px solid #444;
+      color: #eee;
+    }
+    
+    .settings-content {
+      padding: 20px;
+      flex: 1;
+      overflow: auto;
+    }
+    
+    .settings-group {
+      margin-bottom: 20px;
+    }
+    
+    .settings-group-title {
+      font-weight: 600;
+      margin-bottom: 10px;
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .dark-mode .settings-group-title {
+      color: #aaa;
+    }
+    
+    .settings-option {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    
+    .settings-label {
+      font-size: 14px;
+      color: #333;
+    }
+    
+    .dark-mode .settings-label {
+      color: #eee;
+    }
+    
+    select {
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      background-color: #fff;
+      color: #333;
+      font-size: 14px;
+      min-width: 150px;
+    }
+    
+    .dark-mode select {
+      background-color: #444;
+      border: 1px solid #555;
+      color: #eee;
+    }
+    
+    .settings-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #ddd;
+      display: flex;
+      justify-content: flex-end;
+    }
+    
+    .dark-mode .settings-footer {
+      border-top: 1px solid #444;
+    }
+    
+    button {
+      padding: 8px 16px;
+      border-radius: 4px;
+      border: none;
+      background-color: #4a8f69;
+      color: white;
+      font-weight: 500;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    button:hover {
+      background-color: #3a7c59;
+    }
+    
+    button.secondary {
+      background-color: transparent;
+      border: 1px solid #ddd;
+      color: #333;
+      margin-right: 10px;
+    }
+    
+    .dark-mode button.secondary {
+      border: 1px solid #555;
+      color: #eee;
+    }
+    
+    button.secondary:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    
+    .dark-mode button.secondary:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+<body>
+  <div class="settings-container">
+    <h1 class="settings-title">Settings</h1>
+    <div class="settings-content">
+      <div class="settings-group">
+        <div class="settings-group-title">Appearance</div>
+        <div class="settings-option">
+          <div class="settings-label">Theme</div>
+          <select id="theme-select">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="system">Match System</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button class="secondary" id="cancel-button">Cancel</button>
+      <button id="save-button">Save</button>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    const THEME = {
+      LIGHT: 'light',
+      DARK: 'dark',
+      SYSTEM: 'system'
+    };
+    
+    const themeSelect = document.getElementById('theme-select');
+    const saveButton = document.getElementById('save-button');
+    const cancelButton = document.getElementById('cancel-button');
+    
+    let settings = {
+      theme: THEME.SYSTEM
+    };
+    
+    let hasUnsavedChanges = false;
+    let originalSettings = {};
+    let isClosingManually = false;
+    
+    function applyTheme(theme) {
+      if (theme === THEME.DARK || 
+          (theme === THEME.SYSTEM && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.body.classList.add('dark-mode');
+      } else {
+        document.body.classList.remove('dark-mode');
+      }
+    }
+    
+    function checkForChanges() {
+      return settings.theme !== originalSettings.theme;
+    }
+    
+    function loadSettings() {
+      try {
+        const savedSettings = localStorage.getItem('popterm-settings');
+        if (savedSettings) {
+          settings = JSON.parse(savedSettings);
+          originalSettings = { ...settings };
+          themeSelect.value = settings.theme;
+          applyTheme(settings.theme);
+        }
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+      }
+    }
+    
+    function saveSettings() {
+      settings.theme = themeSelect.value;
+      
+      try {
+        localStorage.setItem('popterm-settings', JSON.stringify(settings));
+        ipcRenderer.send('settings-updated', settings);
+        hasUnsavedChanges = false;
+        isClosingManually = true;
+        window.close();
+      } catch (error) {
+        console.error('Failed to save settings:', error);
+      }
+    }
+    
+    function handleCloseAttempt(e) {
+      if (checkForChanges() && !isClosingManually) {
+        ipcRenderer.send('settings-close-attempted');
+        e.preventDefault();
+      }
+    }
+    
+    saveButton.addEventListener('click', saveSettings);
+    
+    cancelButton.addEventListener('click', () => {
+      isClosingManually = true;
+      window.close();
+    });
+    
+    themeSelect.addEventListener('change', () => {
+      settings.theme = themeSelect.value;
+      applyTheme(settings.theme);
+      hasUnsavedChanges = checkForChanges();
+    });
+    
+    ipcRenderer.on('settings-close-confirmed', () => {
+      isClosingManually = true;
+      window.close();
+    });
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (settings.theme === THEME.SYSTEM) {
+        applyTheme(THEME.SYSTEM);
+      }
+    });
+    
+    window.addEventListener('beforeunload', handleCloseAttempt);
+    
+    loadSettings();
+  </script>
+</body>
+</html> 

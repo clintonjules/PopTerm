@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, screen, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, screen, Menu, nativeTheme, dialog } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
 
 let mainWindow: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
 const DEFAULT_HEIGHT = 45;
 const DEFAULT_WIDTH = 500;
 const EXPANDED_HEIGHT = 200;
@@ -44,12 +45,68 @@ function createWindow() {
   createApplicationMenu();
 }
 
+function createSettingsWindow() {
+  if (settingsWindow) {
+    settingsWindow.focus();
+    return;
+  }
+
+  const isDarkMode = nativeTheme.shouldUseDarkColors;
+  
+  settingsWindow = new BrowserWindow({
+    width: 500,
+    height: 400,
+    title: 'Settings',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+    resizable: true,
+    minimizable: true,
+    maximizable: true,
+    frame: true,
+    titleBarStyle: 'default',
+    parent: mainWindow || undefined,
+    modal: false,
+    show: false,
+    backgroundColor: isDarkMode ? '#222222' : '#f5f5f5',
+  });
+
+  settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  
+  settingsWindow.once('ready-to-show', () => {
+    if (settingsWindow) {
+      settingsWindow.show();
+      settingsWindow.focus();
+    }
+  });
+  
+  settingsWindow.on('close', (e) => {
+  });
+  
+  if (process.env.NODE_ENV === 'development') {
+    settingsWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+}
+
 function createApplicationMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'PopTerm',
       submenu: [
         { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Preferences',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => {
+            createSettingsWindow();
+          }
+        },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -63,16 +120,6 @@ function createApplicationMenu() {
     {
       label: 'File',
       submenu: [
-        {
-          label: 'New Terminal',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send('clear-terminal');
-            }
-          }
-        },
-        { type: 'separator' },
         {
           label: 'Clear Terminal',
           accelerator: 'CmdOrCtrl+K',
@@ -183,10 +230,6 @@ function createApplicationMenu() {
 
 app.whenReady().then(() => {
   createWindow();
-  
-  globalShortcut.register('CommandOrControl+Q', () => {
-    app.quit();
-  });
   
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -438,4 +481,35 @@ ipcMain.on('tab-complete', (event, inputText: string) => {
     console.error('Tab completion error:', error);
     event.reply('tab-complete-result', { matches: [], originalInput: inputText });
   }
+});
+
+ipcMain.on('settings-updated', (event, settings) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('settings-updated', settings);
+  }
+});
+
+ipcMain.on('open-settings', () => {
+  createSettingsWindow();
+});
+
+ipcMain.on('settings-close-attempted', (event) => {
+  if (!settingsWindow) return;
+  
+  const options = {
+    type: 'question' as const,
+    buttons: ['Discard Changes', 'Cancel'],
+    defaultId: 0,
+    title: 'Unsaved Changes',
+    message: 'You have unsaved changes. Do you want to discard them?',
+    detail: 'Your changes will be lost if you don\'t save them.',
+    cancelId: 1,
+    noLink: true
+  };
+  
+  dialog.showMessageBox(settingsWindow, options).then((result) => {
+    if (result.response === 0) {
+      event.sender.send('settings-close-confirmed');
+    }
+  });
 }); 
