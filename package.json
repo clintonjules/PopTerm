@@ -1,5 +1,5 @@
 {
-  "name": "PopTerm",
+  "name": "popterm",
   "version": "1.0.0",
   "description": "A minimal popup terminal",
   "main": "dist/main.js",

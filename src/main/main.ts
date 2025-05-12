@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, screen, Menu } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import * as child_process from 'child_process';
@@ -9,7 +9,6 @@ const DEFAULT_HEIGHT = 45;
 const DEFAULT_WIDTH = 500;
 const EXPANDED_HEIGHT = 200;
 let isExpanded = false;
-// Track the current working directory
 let currentWorkingDirectory = os.homedir();
 
 function createWindow() {
@@ -28,14 +27,12 @@ function createWindow() {
     minWidth: 300,
   });
 
-  // Initially, lock the height
   if (mainWindow) {
     mainWindow.setMaximumSize(30000, DEFAULT_HEIGHT);
   }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   
-  // For development
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
@@ -43,12 +40,150 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  
+  createApplicationMenu();
+}
+
+function createApplicationMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'PopTerm',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Terminal',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('clear-terminal');
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Clear Terminal',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('clear-terminal');
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Close Window',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.hide();
+            }
+          }
+        }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Output',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('toggle-output');
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+=',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('zoom-in');
+            }
+          }
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('zoom-out');
+            }
+          }
+        },
+        {
+          label: 'Reset Zoom',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('zoom-reset');
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+        { type: 'separator' },
+        { role: 'window' }
+      ]
+    },
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Learn More',
+          click: async () => {
+            const { shell } = require('electron');
+            await shell.openExternal('https://github.com/clintonjules/PopTerm');
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 app.whenReady().then(() => {
   createWindow();
   
-  // Register keyboard shortcuts
   globalShortcut.register('CommandOrControl+Q', () => {
     app.quit();
   });
@@ -68,7 +203,6 @@ app.setAboutPanelOptions({
 });
 
 app.on('will-quit', () => {
-  // Unregister all shortcuts
   globalShortcut.unregisterAll();
 });
 
@@ -78,30 +212,33 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Handle terminal commands
 ipcMain.on('execute-command', (event, command: string) => {
   const trimmedCommand = command.trim();
   
-  // Handle cd command specially
   if (trimmedCommand.startsWith('cd ')) {
     const targetDir = trimmedCommand.substring(3).trim();
     let newDir = targetDir;
     
-    // Handle relative paths
     if (!path.isAbsolute(targetDir)) {
       if (targetDir === '~') {
         newDir = os.homedir();
       } else if (targetDir === '-') {
-        // Not implementing cd - history for now
         event.reply('command-output', { output: "cd - not implemented\n", type: 'stderr' });
         event.reply('command-complete', { code: 1, stdout: '', stderr: "cd - not implemented\n" });
         return;
+      } else if (targetDir === '..') {
+        newDir = path.dirname(currentWorkingDirectory);
+      } else if (targetDir === '.') {
+        newDir = currentWorkingDirectory;
       } else {
         newDir = path.join(currentWorkingDirectory, targetDir);
       }
     }
     
-    // Check if directory exists
+    if (newDir.startsWith('~')) {
+      newDir = newDir.replace('~', os.homedir());
+    }
+    
     try {
       const stats = fs.statSync(newDir);
       if (stats.isDirectory()) {
@@ -109,7 +246,6 @@ ipcMain.on('execute-command', (event, command: string) => {
         event.reply('command-output', { output: "", type: 'stdout' });
         event.reply('command-complete', { code: 0, stdout: '', stderr: '' });
         
-        // Send the new directory to the renderer
         event.reply('directory-changed', currentWorkingDirectory);
         return;
       } else {
@@ -124,14 +260,49 @@ ipcMain.on('execute-command', (event, command: string) => {
     }
   }
   
-  // For all other commands
-  const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
-  const shellArgs = process.platform === 'win32' ? ['-Command'] : ['-c'];
+  const shell = process.platform === 'win32' ? 
+    'powershell.exe' : 
+    process.env.SHELL || '/bin/bash';
   
-  const termProcess = child_process.spawn(shell, [...shellArgs, command], {
-    shell: true,
-    cwd: currentWorkingDirectory,
-  });
+  let spawnOptions;
+  let spawnCommand;
+  let spawnArgs;
+  
+  const hasRedirection = /[><|]/.test(command);
+  
+  if (process.platform === 'win32') {
+    spawnCommand = shell;
+    spawnArgs = ['-Command', command];
+    spawnOptions = {
+      cwd: currentWorkingDirectory,
+      env: { ...process.env },
+      shell: true
+    };
+  } else {
+    spawnCommand = shell;
+    
+    if (hasRedirection) {
+      spawnArgs = ['-c', command];
+      spawnOptions = {
+        cwd: currentWorkingDirectory,
+        env: { ...process.env },
+        shell: true
+      };
+    } else {
+      spawnArgs = ['-c', command];
+      spawnOptions = {
+        cwd: currentWorkingDirectory,
+        env: { ...process.env },
+        shell: false
+      };
+    }
+  }
+  
+  console.log(`Executing: ${spawnCommand} ${spawnArgs.join(' ')}`);
+  console.log(`In directory: ${currentWorkingDirectory}`);
+  console.log(`Using shell: ${spawnOptions.shell ? 'true' : 'false'}`);
+  
+  const termProcess = child_process.spawn(spawnCommand, spawnArgs, spawnOptions);
   
   let stdout = '';
   let stderr = '';
@@ -146,60 +317,74 @@ ipcMain.on('execute-command', (event, command: string) => {
     event.reply('command-output', { output: data.toString(), type: 'stderr' });
   });
 
+  termProcess.on('error', (error) => {
+    const errorMessage = `Error executing command: ${error.message}\n`;
+    stderr += errorMessage;
+    event.reply('command-output', { output: errorMessage, type: 'stderr' });
+    event.reply('command-complete', { code: 1, stdout, stderr });
+  });
+
   termProcess.on('close', (code) => {
+    if (code === 0 && !command.startsWith('cd ')) {
+      try {
+        const pwdProcess = child_process.spawnSync(shell, ['-c', 'pwd'], {
+          cwd: currentWorkingDirectory,
+          encoding: 'utf8'
+        });
+        
+        if (pwdProcess.status === 0 && pwdProcess.stdout) {
+          const newDir = pwdProcess.stdout.trim();
+          if (newDir && newDir !== currentWorkingDirectory) {
+            currentWorkingDirectory = newDir;
+            event.reply('directory-changed', currentWorkingDirectory);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking pwd:', error);
+      }
+    }
+    
     event.reply('command-complete', { code, stdout, stderr });
   });
 });
 
-// Handle window expansion/collapse
 ipcMain.on('toggle-expand', (event, expanded: boolean) => {
   if (!mainWindow) return;
   
   const [width, height] = mainWindow.getSize();
   
-  // If state hasn't changed, do nothing
   if (expanded === isExpanded) return;
   
   isExpanded = expanded;
   
   if (expanded) {
-    // Remove height restriction
     mainWindow.setMaximumSize(30000, 30000);
     
-    // Set a reasonable expanded height for initial expansion
     const newHeight = Math.max(EXPANDED_HEIGHT, height);
-    mainWindow.setSize(width, newHeight);
+    mainWindow.setSize(width, newHeight, true);
   } else {
-    // Return to default height
-    mainWindow.setSize(width, DEFAULT_HEIGHT);
+    mainWindow.setSize(width, DEFAULT_HEIGHT, true);
     
-    // Set timeout to ensure resize happens before restricting resizing
     setTimeout(() => {
       if (mainWindow) {
-        // Only allow horizontal resizing when collapsed
         mainWindow.setMaximumSize(30000, DEFAULT_HEIGHT);
       }
     }, 100);
   }
 });
 
-// Handle tab completion
 ipcMain.on('tab-complete', (event, inputText: string) => {
   try {
-    // Parse the input to find what we're trying to complete
     const lastWord = inputText.split(/\s+/).pop() || '';
     
-    // If it's empty or just whitespace, return early
     if (!lastWord.trim()) {
       event.reply('tab-complete-result', { matches: [], originalInput: inputText });
       return;
     }
     
-    // Determine if we're completing a path or a command
     let basePath = currentWorkingDirectory;
     let searchPattern = lastWord;
     
-    // Handle home directory shorthand
     if (lastWord.startsWith('~/')) {
       basePath = os.homedir();
       searchPattern = lastWord.substring(2);
@@ -208,18 +393,15 @@ ipcMain.on('tab-complete', (event, inputText: string) => {
       searchPattern = '';
     }
     
-    // Handle absolute paths
     if (path.isAbsolute(lastWord)) {
       basePath = path.dirname(lastWord);
       searchPattern = path.basename(lastWord);
     } 
-    // Handle relative paths with directories
     else if (lastWord.includes('/')) {
       const lastSlashIndex = lastWord.lastIndexOf('/');
       const dirPart = lastWord.substring(0, lastSlashIndex);
       searchPattern = lastWord.substring(lastSlashIndex + 1);
       
-      // Resolve the directory part
       if (dirPart.startsWith('~/')) {
         basePath = path.join(os.homedir(), dirPart.substring(2));
       } else {
@@ -227,13 +409,10 @@ ipcMain.on('tab-complete', (event, inputText: string) => {
       }
     }
     
-    // Get all files in the directory
     const files = fs.readdirSync(basePath);
     
-    // Filter files that match our search pattern
     const matches = files.filter(file => file.startsWith(searchPattern));
     
-    // Add trailing slash to directories
     const matchesWithTypes = matches.map(match => {
       const fullPath = path.join(basePath, match);
       try {
@@ -256,7 +435,6 @@ ipcMain.on('tab-complete', (event, inputText: string) => {
       lastWord
     });
   } catch (error) {
-    // If there's any error, just return no matches
     console.error('Tab completion error:', error);
     event.reply('tab-complete-result', { matches: [], originalInput: inputText });
   }

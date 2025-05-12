@@ -1,11 +1,11 @@
 import React, { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import styled, { createGlobalStyle } from 'styled-components';
+import styled, { createGlobalStyle, css } from 'styled-components';
 import { ipcRenderer } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 
-// Add global CSS variables
-const GlobalStyle = createGlobalStyle`
+
+const GlobalStyle = createGlobalStyle<{ $scale: number }>`
   :root {
     --bg-color: rgba(30, 30, 30, 0.8);
     --bg-color-translucent: rgba(30, 30, 30, 0.5);
@@ -13,11 +13,22 @@ const GlobalStyle = createGlobalStyle`
     --text-color: #ddd;
     --accent-color: #6adf91;
     --error-color: #ff6b6b;
+    --scale-factor: ${props => props.$scale};
+    --font-size-base: calc(14px * var(--scale-factor));
+    --font-size-small: calc(12px * var(--scale-factor));
+  }
+  
+  * {
+    font-size: var(--font-size-base);
   }
 `;
 
-// Add a drag handle component
-const DragHandle = styled.div`
+
+interface DragHandleProps {
+  $expanded: boolean;
+}
+
+const DragHandle = styled.div<DragHandleProps>`
   width: 15px;
   height: 100%;
   background-color: rgba(50, 50, 50, 0.8);
@@ -35,7 +46,8 @@ const DragHandle = styled.div`
   &::after {
     content: "";
     width: 2px;
-    height: 20px;
+    height: ${props => props.$expanded ? "60px" : "20px"};
+    transition: height 0.1s ease;
     background-color: #666;
     border-radius: 4px;
   }
@@ -52,20 +64,25 @@ const Container = styled.div`
   font-family: 'Menlo', 'Monaco', monospace;
 `;
 
-// Add a content container for the main app content
+
 const ContentContainer = styled.div`
   display: flex;
   flex-direction: column;
   flex: 1;
   height: 100%;
   background-color: var(--bg-color);
+  
+  & > *:first-child {
+    flex-shrink: 0;
+    flex-grow: 0; 
+  }
 `;
 
 interface InputContainerProps {
   $expanded: boolean;
 }
 
-// Add a styled component for autocompletion suggestions
+
 const AutocompleteContainer = styled.div`
   position: absolute;
   top: 100%;
@@ -83,6 +100,9 @@ const AutocompleteItem = styled.div<{ $isSelected: boolean }>`
   cursor: pointer;
   color: ${props => props.$isSelected ? '#fff' : 'var(--text-color)'};
   background-color: ${props => props.$isSelected ? 'rgba(70, 70, 70, 0.8)' : 'transparent'};
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   
   &:hover {
     background-color: rgba(60, 60, 60, 0.8);
@@ -95,17 +115,36 @@ const AutocompleteItem = styled.div<{ $isSelected: boolean }>`
   .file {
     color: var(--text-color);
   }
+  
+  .tab-icon {
+    opacity: ${props => props.$isSelected ? 1 : 0};
+    font-size: 12px;
+    color: #999;
+    display: flex;
+    align-items: center;
+    margin-left: 8px;
+  }
+  
+  .tab-key {
+    border: 1px solid #666;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 10px;
+    margin-left: 4px;
+  }
 `;
 
-// Update InputContainer to handle positioning the autocomplete dropdown
+
 const InputContainer = styled.div<InputContainerProps>`
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 8px 12px 9px;
   background-color: var(--bg-color);
-  border-bottom: 1px solid ${props => props.$expanded ? 'var(--border-color)' : 'transparent'};
+  box-shadow: ${props => props.$expanded ? '0 1px 0 var(--border-color)' : 'none'};
   -webkit-app-region: no-drag;
-  height: 45px;
+  height: 45px; 
+  min-height: 45px; 
+  max-height: 45px; 
   box-sizing: border-box;
   position: relative;
 `;
@@ -124,11 +163,13 @@ const Input = styled.input`
   background: transparent;
   border: none;
   color: #ffffff;
-  font-size: 14px;
+  font-size: var(--font-size-base);
   outline: none;
   font-family: inherit;
   -webkit-app-region: no-drag;
   height: 100%;
+  min-height: 20px; 
+  max-height: 20px; 
   line-height: normal;
   vertical-align: middle;
   padding: 0;
@@ -145,7 +186,7 @@ const ToggleButton = styled.button<ToggleButtonProps>`
   color: ${props => props.$hasOutput ? '#999' : '#555'};
   cursor: ${props => props.$hasOutput ? 'pointer' : 'default'};
   transform: ${props => props.$expanded ? 'rotate(180deg)' : 'rotate(0deg)'};
-  transition: transform 0.2s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
   outline: none;
   -webkit-app-region: no-drag;
   
@@ -159,20 +200,26 @@ interface OutputContainerProps {
 }
 
 const OutputContainer = styled.div<OutputContainerProps>`
-  display: ${props => props.$expanded ? 'block' : 'none'};
-  max-height: calc(10 * 1.2em);
+  overflow: hidden;
+  max-height: ${props => props.$expanded ? "calc(10 * 1.2em)" : "0"};
+  opacity: ${props => props.$expanded ? "1" : "0"};
+  transition: max-height 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.2s ease-in-out;
+  padding: ${props => props.$expanded ? "8px 16px" : "0 16px"};
   overflow-y: auto;
-  padding: 8px 16px;
   background-color: var(--bg-color);
   -webkit-app-region: no-drag;
   user-select: text;
   pointer-events: auto;
+  flex: ${props => props.$expanded ? "1" : "0"};
+  min-height: 0; 
+  display: flex;
+  flex-direction: column;
 `;
 
 const OutputText = styled.pre`
   margin: 0;
   color: var(--text-color);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   white-space: pre-wrap;
   word-break: break-all;
   line-height: 1.2em;
@@ -201,24 +248,26 @@ const App: React.FC = () => {
   const [expanded, setExpanded] = useState(false);
   const [outputLines, setOutputLines] = useState<OutputLine[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
-  // Add command history state
+  
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [savedCurrentCommand, setSavedCurrentCommand] = useState('');
-  // Add current directory state
+  
   const [currentDirectory, setCurrentDirectory] = useState(os.homedir());
-  // Add autocomplete state
+  
   const [autocompleteMatches, setAutocompleteMatches] = useState<AutocompleteMatch[]>([]);
   const [selectedAutocompleteIndex, setSelectedAutocompleteIndex] = useState(0);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   
+  const [scale, setScale] = useState(1);
+  
   const outputRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Calculate if we have any output to show
+  
   const hasOutput = outputLines.length > 0 || isExecuting;
 
-  // Format the current directory for display
+  
   const getFormattedDirectory = () => {
     const homedir = os.homedir();
     if (currentDirectory.startsWith(homedir)) {
@@ -227,26 +276,42 @@ const App: React.FC = () => {
     return currentDirectory;
   };
 
-  // Get the directory name for display
+  
   const getDirectoryName = () => {
     return path.basename(currentDirectory);
   };
+  
+  
+  const toggleExpanded = () => {
+    
+    if (hasOutput) {
+      setExpanded(!expanded);
+    }
+  };
 
-  // Notify main process of expansion state changes
+  const clearOutput = () => {
+    setOutputLines([]);
+    
+    if (expanded) {
+      setExpanded(false);
+    }
+  };
+
+  
   useEffect(() => {
-    // Only notify main process to expand if we actually have output
+    
     const shouldExpand = expanded && hasOutput;
     ipcRenderer.send('toggle-expand', shouldExpand);
   }, [expanded, hasOutput]);
 
-  // Auto scroll to bottom when output changes
+  
   useEffect(() => {
     if (outputRef.current && expanded) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [outputLines, expanded]);
 
-  // Setup IPC listeners
+  
   useEffect(() => {
     const handleOutput = (_: any, data: { output: string, type: 'stdout' | 'stderr' }) => {
       setOutputLines(prev => [...prev, { content: data.output, type: data.type }]);
@@ -259,50 +324,84 @@ const App: React.FC = () => {
     const handleDirectoryChanged = (_: any, newDirectory: string) => {
       setCurrentDirectory(newDirectory);
     };
+    
+    
+    const handleClearTerminal = () => {
+      clearOutput();
+    };
+    
+    const handleToggleOutput = () => {
+      if (hasOutput) {
+        toggleExpanded();
+      }
+    };
+    
+    
+    const handleZoomIn = () => {
+      setScale(prevScale => Math.min(prevScale + 0.1, 2.0));
+    };
+    
+    const handleZoomOut = () => {
+      setScale(prevScale => Math.max(prevScale - 0.1, 0.5));
+    };
+    
+    const handleZoomReset = () => {
+      setScale(1.0);
+    };
 
     ipcRenderer.on('command-output', handleOutput);
     ipcRenderer.on('command-complete', handleComplete);
     ipcRenderer.on('directory-changed', handleDirectoryChanged);
+    ipcRenderer.on('clear-terminal', handleClearTerminal);
+    ipcRenderer.on('toggle-output', handleToggleOutput);
+    ipcRenderer.on('zoom-in', handleZoomIn);
+    ipcRenderer.on('zoom-out', handleZoomOut);
+    ipcRenderer.on('zoom-reset', handleZoomReset);
 
     return () => {
       ipcRenderer.removeListener('command-output', handleOutput);
       ipcRenderer.removeListener('command-complete', handleComplete);
       ipcRenderer.removeListener('directory-changed', handleDirectoryChanged);
+      ipcRenderer.removeListener('clear-terminal', handleClearTerminal);
+      ipcRenderer.removeListener('toggle-output', handleToggleOutput);
+      ipcRenderer.removeListener('zoom-in', handleZoomIn);
+      ipcRenderer.removeListener('zoom-out', handleZoomOut);
+      ipcRenderer.removeListener('zoom-reset', handleZoomReset);
     };
-  }, []);
+  }, [hasOutput, clearOutput, toggleExpanded]); 
 
-  // Handle Tab key for autocompletion
+  
   const handleTabCompletion = () => {
     if (command.trim() === '') return;
     
-    // If autocomplete is already showing and we have matches
+    
     if (showAutocomplete && autocompleteMatches.length > 0) {
       applyAutocomplete(autocompleteMatches[selectedAutocompleteIndex]);
       return;
     }
     
-    // Request tab completion from main process
+    
     ipcRenderer.send('tab-complete', command);
   };
   
-  // Apply the selected autocomplete suggestion
+  
   const applyAutocomplete = (match: AutocompleteMatch) => {
-    // Get the parts of the command
+    
     const parts = command.split(/\s+/);
     const lastPart = parts.pop() || '';
     
-    // Find where the last part starts in the command
+    
     const lastPartIndex = command.lastIndexOf(lastPart);
     
-    // Create the new command with the autocomplete applied
+    
     let newCommand = command.substring(0, lastPartIndex);
     newCommand += match.name;
     
-    // Add trailing slash for directories
+    
     if (match.isDirectory) {
       newCommand += '/';
     } else {
-      // Add space for completed commands/files
+      
       newCommand += ' ';
     }
     
@@ -310,7 +409,7 @@ const App: React.FC = () => {
     setShowAutocomplete(false);
   };
 
-  // Setup IPC listeners for tab completion
+  
   useEffect(() => {
     const handleTabCompleteResult = (_: any, data: { 
       matches: AutocompleteMatch[], 
@@ -323,10 +422,10 @@ const App: React.FC = () => {
       }
       
       if (data.matches.length === 1) {
-        // If there's only one match, apply it directly
+        
         applyAutocomplete(data.matches[0]);
       } else {
-        // Show autocomplete suggestions
+        
         setAutocompleteMatches(data.matches);
         setSelectedAutocompleteIndex(0);
         setShowAutocomplete(true);
@@ -340,7 +439,7 @@ const App: React.FC = () => {
     };
   }, [command]);
   
-  // Close autocomplete when clicking outside
+  
   useEffect(() => {
     const handleClickOutside = () => {
       setShowAutocomplete(false);
@@ -353,7 +452,7 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Update handleKeyDown for Tab, Escape, and arrow keys for autocomplete
+  
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       executeCommand();
@@ -371,16 +470,16 @@ const App: React.FC = () => {
         );
       } else {
         e.preventDefault();
-        // Navigate up through history
+        
         if (commandHistory.length > 0) {
           if (historyIndex === -1) {
-            // Save current command when starting to navigate history
+            
             setSavedCurrentCommand(command);
-            // Start from the most recent command
+            
             setHistoryIndex(commandHistory.length - 1);
             setCommand(commandHistory[commandHistory.length - 1]);
           } else if (historyIndex > 0) {
-            // Move up in history
+            
             setHistoryIndex(historyIndex - 1);
             setCommand(commandHistory[historyIndex - 1]);
           }
@@ -394,14 +493,14 @@ const App: React.FC = () => {
         );
       } else {
         e.preventDefault();
-        // Navigate down through history
+        
         if (historyIndex !== -1) {
           if (historyIndex === commandHistory.length - 1) {
-            // At the end of history, restore the saved command
+            
             setHistoryIndex(-1);
             setCommand(savedCurrentCommand);
           } else {
-            // Move down in history
+            
             setHistoryIndex(historyIndex + 1);
             setCommand(commandHistory[historyIndex + 1]);
           }
@@ -410,22 +509,22 @@ const App: React.FC = () => {
     }
   };
   
-  // Close autocomplete when input changes
+  
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCommand(e.target.value);
     setShowAutocomplete(false);
   };
 
-  // Auto-focus input on mount and after command execution
+  
   useEffect(() => {
-    // Focus the input when the component mounts
+    
     if (inputRef.current) {
       inputRef.current.focus();
     }
     
-    // Setup a click handler to focus input when clicking anywhere in the app
+    
     const handleAppClick = (e: MouseEvent) => {
-      // Don't refocus if clicking on autocomplete or if currently executing
+      
       if (
         showAutocomplete || 
         isExecuting ||
@@ -440,40 +539,59 @@ const App: React.FC = () => {
       }
     };
     
+    
+    const handleKeyboardShortcuts = (e: globalThis.KeyboardEvent) => {
+      
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          setScale(prevScale => Math.min(prevScale + 0.1, 2.0));
+        } else if (e.key === '-') {
+          e.preventDefault();
+          setScale(prevScale => Math.max(prevScale - 0.1, 0.5));
+        } else if (e.key === '0') {
+          e.preventDefault();
+          setScale(1.0);
+        }
+      }
+    };
+    
     document.addEventListener('click', handleAppClick);
+    document.addEventListener('keydown', handleKeyboardShortcuts);
     
     return () => {
       document.removeEventListener('click', handleAppClick);
+      document.removeEventListener('keydown', handleKeyboardShortcuts);
     };
   }, [showAutocomplete, isExecuting]);
 
   const executeCommand = () => {
     if (!command.trim() || isExecuting) return;
     
-    // Clear output first, then set executing state
+    
     setOutputLines([{ content: `${getDirectoryName()} $ ${command}\n`, type: 'stdout' }]);
     setIsExecuting(true);
     
-    // Add command to history
+    
     setCommandHistory(prev => {
-      // Don't add duplicate commands in a row
+      
       if (prev.length > 0 && prev[prev.length - 1] === command) {
         return prev;
       }
       return [...prev, command];
     });
-    // Reset history index
+    
     setHistoryIndex(-1);
     
-    // Store the command before clearing the input
+    
     const executedCommand = command;
     setCommand('');
     
-    // Execute after state updates
+    
     setTimeout(() => {
       ipcRenderer.send('execute-command', executedCommand);
       
-      // Focus the input again - use a slightly longer timeout to ensure focus works
+      
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
@@ -482,26 +600,11 @@ const App: React.FC = () => {
     }, 0);
   };
 
-  const toggleExpanded = () => {
-    // Only toggle if we have output to show
-    if (hasOutput) {
-      setExpanded(!expanded);
-    }
-  };
-
-  const clearOutput = () => {
-    setOutputLines([]);
-    // If expanded, collapse the window when clearing output
-    if (expanded) {
-      setExpanded(false);
-    }
-  };
-
   return (
     <>
-      <GlobalStyle />
+      <GlobalStyle $scale={scale} />
       <Container>
-        <DragHandle />
+        <DragHandle $expanded={expanded && hasOutput} />
         <ContentContainer>
           <InputContainer $expanded={expanded && hasOutput}>
             <Prompt>{getDirectoryName()} $</Prompt>
@@ -510,7 +613,7 @@ const App: React.FC = () => {
               value={command}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Enter command..."
+              placeholder="Enter a command..."
               disabled={isExecuting}
               autoFocus
             />
@@ -532,10 +635,17 @@ const App: React.FC = () => {
                     $isSelected={index === selectedAutocompleteIndex}
                     onClick={() => applyAutocomplete(match)}
                   >
-                    {match.isDirectory ? (
-                      <span className="directory">{match.name}/</span>
-                    ) : (
-                      <span className="file">{match.name}</span>
+                    <div>
+                      {match.isDirectory ? (
+                        <span className="directory">{match.name}/</span>
+                      ) : (
+                        <span className="file">{match.name}</span>
+                      )}
+                    </div>
+                    {index === selectedAutocompleteIndex && (
+                      <span className="tab-icon">
+                        press <span className="tab-key">Tab</span>
+                      </span>
                     )}
                   </AutocompleteItem>
                 ))}
@@ -548,7 +658,7 @@ const App: React.FC = () => {
               ref={outputRef} 
               $expanded={expanded}
               onClick={(e) => {
-                // Only refocus if no text is being selected
+                
                 if (window.getSelection()?.toString() === '') {
                   if (inputRef.current) {
                     inputRef.current.focus();
