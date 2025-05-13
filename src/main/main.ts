@@ -4,6 +4,10 @@ import * as os from 'os';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
 
+
+app.setName('PopTerm');
+app.name = 'PopTerm';
+
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 const DEFAULT_HEIGHT = 45;
@@ -11,6 +15,95 @@ const DEFAULT_WIDTH = 500;
 const EXPANDED_HEIGHT = 200;
 let isExpanded = false;
 let currentWorkingDirectory = os.homedir();
+
+
+const defaultSettings = {
+  theme: 'system',
+  position: 'center'
+};
+
+
+let appSettings = { ...defaultSettings };
+
+
+function positionWindow(win: BrowserWindow) {
+  const { width, height } = win.getBounds();
+  const screenBounds = screen.getPrimaryDisplay().workAreaSize;
+  
+  const padding = 20; 
+  
+  let x, y;
+  
+  switch (appSettings.position) {
+    case 'top-center':
+      x = Math.round((screenBounds.width - width) / 2);
+      y = padding;
+      break;
+    case 'top-right':
+      x = screenBounds.width - width - padding;
+      y = padding;
+      break;
+    case 'top-left':
+      x = padding;
+      y = padding;
+      break;
+    case 'bottom-center':
+      x = Math.round((screenBounds.width - width) / 2);
+      y = screenBounds.height - height - padding;
+      break;
+    case 'bottom-right':
+      x = screenBounds.width - width - padding;
+      y = screenBounds.height - height - padding;
+      break;
+    case 'bottom-left':
+      x = padding;
+      y = screenBounds.height - height - padding;
+      break;
+    case 'center-right':
+      x = screenBounds.width - width - padding;
+      y = Math.round((screenBounds.height - height) / 2);
+      break;
+    case 'center-left':
+      x = padding;
+      y = Math.round((screenBounds.height - height) / 2);
+      break;
+    case 'center':
+    default:
+      x = Math.round((screenBounds.width - width) / 2);
+      y = Math.round((screenBounds.height - height) / 2);
+      break;
+  }
+  
+  win.setPosition(x, y);
+}
+
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(path.join(app.getPath('userData'), 'settings.json'))) {
+      const settingsData = fs.readFileSync(path.join(app.getPath('userData'), 'settings.json'), 'utf8');
+      const savedSettings = JSON.parse(settingsData);
+      appSettings = { ...defaultSettings, ...savedSettings };
+    }
+  } catch (error) {
+    console.error('Failed to load settings:', error);
+  }
+}
+
+
+function saveSettings(settings: any) {
+  try {
+    fs.writeFileSync(path.join(app.getPath('userData'), 'settings.json'), JSON.stringify(settings));
+    appSettings = { ...settings };
+    
+    
+    if (mainWindow) {
+      positionWindow(mainWindow);
+    }
+  } catch (error) {
+    console.error('Failed to save settings:', error);
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -30,19 +123,33 @@ function createWindow() {
 
   if (mainWindow) {
     mainWindow.setMaximumSize(30000, DEFAULT_HEIGHT);
+    
+    
+    positionWindow(mainWindow);
   }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
-
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
   
   createApplicationMenu();
+}
+
+function createNewWindowIfNotExists(): BrowserWindow {
+  if (!mainWindow) {
+    createWindow();
+  } else if (!mainWindow.isVisible()) {
+    mainWindow.show();
+    
+    positionWindow(mainWindow);
+    mainWindow.focus();
+  } else {
+    mainWindow.focus();
+  }
+  
+  return mainWindow!;
 }
 
 function createSettingsWindow() {
@@ -56,7 +163,7 @@ function createSettingsWindow() {
   settingsWindow = new BrowserWindow({
     width: 500,
     height: 400,
-    title: 'Settings',
+    title: '',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -81,13 +188,29 @@ function createSettingsWindow() {
     }
   });
   
+  
+  const settingsMenu = Menu.buildFromTemplate([
+    {
+      label: 'Options',
+      submenu: [
+        {
+          label: 'Toggle DevTools',
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => {
+            if (settingsWindow) {
+              settingsWindow.webContents.toggleDevTools();
+            }
+          }
+        }
+      ]
+    }
+  ]);
+  
+  settingsWindow.setMenu(settingsMenu);
+  
   settingsWindow.on('close', (e) => {
   });
   
-  if (process.env.NODE_ENV === 'development') {
-    settingsWindow.webContents.openDevTools({ mode: 'detach' });
-  }
-
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
@@ -96,7 +219,7 @@ function createSettingsWindow() {
 function createApplicationMenu() {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: 'PopTerm',
+      label: 'PopTerm', 
       submenu: [
         { role: 'about' },
         { type: 'separator' },
@@ -120,6 +243,13 @@ function createApplicationMenu() {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            createNewWindowIfNotExists();
+          }
+        },
         {
           label: 'Clear Terminal',
           accelerator: 'CmdOrCtrl+K',
@@ -164,6 +294,16 @@ function createApplicationMenu() {
           click: () => {
             if (mainWindow) {
               mainWindow.webContents.send('toggle-output');
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Toggle DevTools',
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.toggleDevTools();
             }
           }
         },
@@ -229,7 +369,21 @@ function createApplicationMenu() {
 }
 
 app.whenReady().then(() => {
+  
+  loadSettings();
+  
   createWindow();
+  
+  
+  const shortcutRegistered = globalShortcut.register('CommandOrControl+Alt+T', () => {
+    createNewWindowIfNotExists();
+  });
+  
+  if (!shortcutRegistered) {
+    console.error('Global shortcut registration failed');
+  } else {
+    console.log('Global shortcut registered: CommandOrControl+Alt+T');
+  }
   
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -242,7 +396,7 @@ app.setAboutPanelOptions({
   applicationName: 'PopTerm',
   applicationVersion: '1.0.0',
   credits: 'Built with Electron, React, and TypeScript',
-  website: 'https://github.com/clintonjules/PopTerm' 
+  website: 'https://github.com/clintonjules/PopTerm'
 });
 
 app.on('will-quit', () => {
@@ -484,6 +638,10 @@ ipcMain.on('tab-complete', (event, inputText: string) => {
 });
 
 ipcMain.on('settings-updated', (event, settings) => {
+  
+  saveSettings(settings);
+  
+  
   if (mainWindow) {
     mainWindow.webContents.send('settings-updated', settings);
   }
@@ -491,6 +649,10 @@ ipcMain.on('settings-updated', (event, settings) => {
 
 ipcMain.on('open-settings', () => {
   createSettingsWindow();
+});
+
+ipcMain.on('create-or-show-window', () => {
+  createNewWindowIfNotExists();
 });
 
 ipcMain.on('settings-close-attempted', (event) => {
@@ -512,4 +674,9 @@ ipcMain.on('settings-close-attempted', (event) => {
       event.sender.send('settings-close-confirmed');
     }
   });
+});
+
+
+ipcMain.on('get-settings', (event) => {
+  event.reply('settings-response', appSettings);
 }); 

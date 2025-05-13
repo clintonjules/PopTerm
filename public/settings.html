@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings</title>
+  <title>PopTerm Settings</title>
   <script>
     (function() {
       try {
@@ -58,20 +58,6 @@
     
     .dark-mode .settings-container {
       background-color: #333;
-    }
-    
-    .settings-title {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      padding: 16px 20px;
-      border-bottom: 1px solid #ddd;
-      color: #333;
-    }
-    
-    .dark-mode .settings-title {
-      border-bottom: 1px solid #444;
-      color: #eee;
     }
     
     .settings-content {
@@ -176,7 +162,6 @@
 </head>
 <body>
   <div class="settings-container">
-    <h1 class="settings-title">Settings</h1>
     <div class="settings-content">
       <div class="settings-group">
         <div class="settings-group-title">Appearance</div>
@@ -186,6 +171,24 @@
             <option value="light">Light</option>
             <option value="dark">Dark</option>
             <option value="system">Match System</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">Window</div>
+        <div class="settings-option">
+          <div class="settings-label">Window Position</div>
+          <select id="position-select">
+            <option value="top-left">Top Left</option>
+            <option value="top-center">Top Center</option>
+            <option value="top-right">Top Right</option>
+            <option value="center-left">Center Left</option>
+            <option value="center">Center Center</option>
+            <option value="center-right">Center Right</option>
+            <option value="bottom-left">Bottom Left</option>
+            <option value="bottom-center">Bottom Center</option>
+            <option value="bottom-right">Bottom Right</option>
           </select>
         </div>
       </div>
@@ -205,12 +208,26 @@
       SYSTEM: 'system'
     };
     
+    const POSITION = {
+      CENTER: 'center',
+      TOP_CENTER: 'top-center',
+      TOP_RIGHT: 'top-right',
+      TOP_LEFT: 'top-left',
+      BOTTOM_CENTER: 'bottom-center',
+      BOTTOM_RIGHT: 'bottom-right',
+      BOTTOM_LEFT: 'bottom-left',
+      CENTER_RIGHT: 'center-right',
+      CENTER_LEFT: 'center-left'
+    };
+    
     const themeSelect = document.getElementById('theme-select');
+    const positionSelect = document.getElementById('position-select');
     const saveButton = document.getElementById('save-button');
     const cancelButton = document.getElementById('cancel-button');
     
     let settings = {
-      theme: THEME.SYSTEM
+      theme: THEME.SYSTEM,
+      position: POSITION.CENTER
     };
     
     let hasUnsavedChanges = false;
@@ -227,16 +244,26 @@
     }
     
     function checkForChanges() {
-      return settings.theme !== originalSettings.theme;
+      return settings.theme !== originalSettings.theme || 
+             settings.position !== originalSettings.position;
     }
     
     function loadSettings() {
       try {
+        
+        ipcRenderer.send('get-settings');
+        
+        
         const savedSettings = localStorage.getItem('popterm-settings');
         if (savedSettings) {
           settings = JSON.parse(savedSettings);
+          
+          if (!settings.position) {
+            settings.position = POSITION.CENTER;
+          }
           originalSettings = { ...settings };
           themeSelect.value = settings.theme;
+          positionSelect.value = settings.position;
           applyTheme(settings.theme);
         }
       } catch (error) {
@@ -246,9 +273,12 @@
     
     function saveSettings() {
       settings.theme = themeSelect.value;
+      settings.position = positionSelect.value;
       
       try {
+        
         localStorage.setItem('popterm-settings', JSON.stringify(settings));
+        
         ipcRenderer.send('settings-updated', settings);
         hasUnsavedChanges = false;
         isClosingManually = true;
@@ -278,6 +308,11 @@
       hasUnsavedChanges = checkForChanges();
     });
     
+    positionSelect.addEventListener('change', () => {
+      settings.position = positionSelect.value;
+      hasUnsavedChanges = checkForChanges();
+    });
+    
     ipcRenderer.on('settings-close-confirmed', () => {
       isClosingManually = true;
       window.close();
@@ -286,6 +321,24 @@
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
       if (settings.theme === THEME.SYSTEM) {
         applyTheme(THEME.SYSTEM);
+      }
+    });
+    
+    
+    ipcRenderer.on('settings-response', (event, mainSettings) => {
+      if (mainSettings) {
+        settings = { ...settings, ...mainSettings };
+        originalSettings = { ...settings };
+        
+        
+        if (settings.theme) {
+          themeSelect.value = settings.theme;
+        }
+        if (settings.position) {
+          positionSelect.value = settings.position;
+        }
+        
+        applyTheme(settings.theme);
       }
     });
     

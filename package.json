@@ -6,9 +6,9 @@
   "scripts": {
     "build": "webpack --config webpack.config.js",
     "watch": "webpack --config webpack.config.js --watch",
-    "start": "npm run build && electron .",
-    "dev": "concurrently \"npm run watch\" \"electron .\"",
-    "package": "electron-builder build --mac --win --linux"
+    "start": "npm run build && node electron-main.js .",
+    "dev": "concurrently \"npm run watch\" \"node electron-main.js .\"",
+    "package": "npm run build && node build/package.js"
   },
   "keywords": [
     "terminal",
@@ -50,8 +50,28 @@
       "dist/**/*",
       "public/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "build/Info.plist",
+        "to": "Info.plist"
+      }
+    ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "electronLanguages": [
+        "en"
+      ],
+      "artifactName": "PopTerm-${version}-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extraFiles": [
+        {
+          "from": "build/Info.plist",
+          "to": "Info.plist"
+        }
+      ]
     },
     "linux": {
       "target": [
@@ -62,5 +82,6 @@
     "win": {
       "target": "nsis"
     }
-  }
+  },
+  "productName": "PopTerm"
 }

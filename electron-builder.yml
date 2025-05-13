@@ -1,0 +1,34 @@
+appId: com.example.popterm
+productName: PopTerm
+buildVersion: 1.0.0
+copyright: Copyright © 2025
+directories:
+  output: dist-app
+  buildResources: build
+files:
+  - dist/**/*
+  - public/**/*
+extraResources:
+  - from: build/Info.plist
+    to: Info.plist
+mac:
+  category: public.app-category.developer-tools
+  electronLanguages: [en]
+  artifactName: PopTerm-${version}-${arch}.${ext}
+  identity: null
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extraFiles:
+    - from: build/Info.plist
+      to: Info.plist
+  icon: build/icon.icns
+  target:
+    - target: dmg
+    - target: zip
+linux:
+  target:
+    - AppImage
+    - deb
+win:
+  target: nsis 
