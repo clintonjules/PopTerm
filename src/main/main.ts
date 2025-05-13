@@ -36,7 +36,6 @@ let registeredShortcut: string | null = null;
 function positionWindow(win: BrowserWindow) {
   const { width, height } = win.getBounds();
   
-  // Get the current screen where the cursor is
   const point = screen.getCursorScreenPoint();
   const currentDisplay = screen.getDisplayNearestPoint(point);
   const screenBounds = currentDisplay.workArea;
@@ -96,7 +95,6 @@ function loadSettings() {
       const savedSettings = JSON.parse(settingsData);
       appSettings = { ...defaultSettings, ...savedSettings };
       
-      // Apply the shortcut
       registerGlobalShortcut();
     }
   } catch (error) {
@@ -110,12 +108,10 @@ function saveSettings(settings: any) {
     fs.writeFileSync(path.join(app.getPath('userData'), 'settings.json'), JSON.stringify(settings));
     appSettings = { ...settings };
     
-    // Apply new settings
     if (mainWindow) {
       positionWindow(mainWindow);
     }
     
-    // Update global shortcut
     registerGlobalShortcut();
   } catch (error) {
     console.error('Failed to save settings:', error);
@@ -123,13 +119,11 @@ function saveSettings(settings: any) {
 }
 
 function registerGlobalShortcut() {
-  // First unregister any existing shortcut
   if (registeredShortcut) {
     globalShortcut.unregister(registeredShortcut);
     registeredShortcut = null;
   }
   
-  // Construct the accelerator string
   const { shortcut } = appSettings;
   if (!shortcut || !shortcut.key) return;
   
@@ -147,7 +141,6 @@ function registerGlobalShortcut() {
   registeredShortcut = accelerator;
   
   const shortcutRegistered = globalShortcut.register(accelerator, () => {
-    // Toggle the window (show/hide)
     if (mainWindow && mainWindow.isVisible()) {
       mainWindow.hide();
     } else {
@@ -155,9 +148,10 @@ function registerGlobalShortcut() {
     }
   });
   
-  // For display purposes, show the correct modifier key based on platform
   const isMac = process.platform === 'darwin';
-  const displayAccelerator = accelerator.replace('CommandOrControl', isMac ? 'Cmd' : 'Ctrl');
+  const displayAccelerator = accelerator
+    .replace('CommandOrControl', isMac ? 'Cmd' : 'Ctrl')
+    .replace('Alt', isMac ? 'Option' : 'Alt');
   
   if (!shortcutRegistered) {
     console.error(`Global shortcut registration failed: ${displayAccelerator}`);
@@ -220,7 +214,6 @@ function createWindow() {
     mainWindow = null;
   });
   
-  // Close button should hide the window, not close it
   mainWindow.on('close', (event) => {
     if (mainWindow && mainWindow.isVisible()) {
       event.preventDefault();
@@ -238,10 +231,8 @@ function createNewWindowIfNotExists(): BrowserWindow {
   if (!mainWindow) {
     createWindow();
   } else if (!mainWindow.isVisible()) {
-    // Show window and ensure it is properly positioned and focused
     positionWindow(mainWindow);
     
-    // Ensure window appears over fullscreen apps
     if (process.platform === 'darwin') {
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
@@ -249,13 +240,11 @@ function createNewWindowIfNotExists(): BrowserWindow {
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
     }
     
-    // Move window to the current screen if needed
     const point = screen.getCursorScreenPoint();
     const currentDisplay = screen.getDisplayNearestPoint(point);
     const screenBounds = currentDisplay.workArea;
     const [x, y] = mainWindow.getPosition();
     
-    // Check if window is on a different screen
     if (x < screenBounds.x || x > screenBounds.x + screenBounds.width ||
         y < screenBounds.y || y > screenBounds.y + screenBounds.height) {
       positionWindow(mainWindow);
@@ -264,7 +253,6 @@ function createNewWindowIfNotExists(): BrowserWindow {
     mainWindow.show();
     mainWindow.focus();
   } else {
-    // Hide the window instead of just focusing it
     mainWindow.hide();
   }
   
@@ -277,7 +265,8 @@ function createSettingsWindow() {
     return;
   }
 
-  const isDarkMode = nativeTheme.shouldUseDarkColors;
+  const isDarkTheme = appSettings.theme === 'dark' || 
+                     (appSettings.theme === 'system' && nativeTheme.shouldUseDarkColors);
   
   settingsWindow = new BrowserWindow({
     width: 500,
@@ -292,13 +281,17 @@ function createSettingsWindow() {
     maximizable: true,
     frame: true,
     titleBarStyle: 'default',
-    parent: mainWindow || undefined,
-    modal: false,
     show: false,
-    backgroundColor: isDarkMode ? '#222222' : '#f5f5f5',
+    alwaysOnTop: true,
+    backgroundColor: isDarkTheme ? '#222222' : '#f5f5f5',
   });
 
   settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  
+  if (process.platform === 'darwin') {
+    settingsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    settingsWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+  }
   
   settingsWindow.once('ready-to-show', () => {
     if (settingsWindow) {
@@ -326,9 +319,6 @@ function createSettingsWindow() {
   ]);
   
   settingsWindow.setMenu(settingsMenu);
-  
-  settingsWindow.on('close', (e) => {
-  });
   
   settingsWindow.on('closed', () => {
     settingsWindow = null;
@@ -502,6 +492,23 @@ app.whenReady().then(() => {
   
   createWindow();
   
+  nativeTheme.on('updated', () => {
+    if (appSettings.theme === 'system') {
+      const isDarkTheme = nativeTheme.shouldUseDarkColors;
+      
+      if (settingsWindow) {
+        settingsWindow.setBackgroundColor(isDarkTheme ? '#222222' : '#f5f5f5');
+      }
+      
+      if (mainWindow) {
+        mainWindow.webContents.send('system-theme-changed', isDarkTheme ? 'dark' : 'light');
+      }
+      if (settingsWindow) {
+        settingsWindow.webContents.send('system-theme-changed', isDarkTheme ? 'dark' : 'light');
+      }
+    }
+  });
+  
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -517,7 +524,6 @@ app.setAboutPanelOptions({
 });
 
 app.on('will-quit', () => {
-  // Clean up by unregistering all shortcuts
   if (registeredShortcut) {
     globalShortcut.unregister(registeredShortcut);
     registeredShortcut = null;
@@ -767,12 +773,21 @@ ipcMain.on('tab-complete', (event, inputText: string) => {
 });
 
 ipcMain.on('settings-updated', (event, settings) => {
-  
   saveSettings(settings);
-  
   
   if (mainWindow) {
     mainWindow.webContents.send('settings-updated', settings);
+  }
+});
+
+ipcMain.on('theme-changed', (event, theme) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('theme-changed', theme);
+  }
+  
+  if (settingsWindow) {
+    const isDarkTheme = theme === 'dark' || (theme === 'system' && nativeTheme.shouldUseDarkColors);
+    settingsWindow.setBackgroundColor(isDarkTheme ? '#222222' : '#f5f5f5');
   }
 });
 
@@ -783,28 +798,6 @@ ipcMain.on('open-settings', () => {
 ipcMain.on('create-or-show-window', () => {
   createNewWindowIfNotExists();
 });
-
-ipcMain.on('settings-close-attempted', (event) => {
-  if (!settingsWindow) return;
-  
-  const options = {
-    type: 'question' as const,
-    buttons: ['Discard Changes', 'Cancel'],
-    defaultId: 0,
-    title: 'Unsaved Changes',
-    message: 'You have unsaved changes. Do you want to discard them?',
-    detail: 'Your changes will be lost if you don\'t save them.',
-    cancelId: 1,
-    noLink: true
-  };
-  
-  dialog.showMessageBox(settingsWindow, options).then((result) => {
-    if (result.response === 0) {
-      event.sender.send('settings-close-confirmed');
-    }
-  });
-});
-
 
 ipcMain.on('get-settings', (event) => {
   event.reply('settings-response', appSettings);

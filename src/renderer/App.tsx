@@ -547,10 +547,36 @@ const App: React.FC = () => {
       setSettings(newSettings);
     };
     
+    // Add handler for real-time theme changes
+    const handleThemeChanged = (_: any, newTheme: string) => {
+      setSettings(prev => ({ ...prev, theme: newTheme as Theme }));
+      
+      // Also save to localStorage to persist the change
+      try {
+        const savedSettings = localStorage.getItem('popterm-settings');
+        if (savedSettings) {
+          const parsedSettings = JSON.parse(savedSettings);
+          parsedSettings.theme = newTheme;
+          localStorage.setItem('popterm-settings', JSON.stringify(parsedSettings));
+        }
+      } catch (error) {
+        console.error('Failed to update theme in localStorage:', error);
+      }
+    };
+    
+    // Handle system theme changes
+    const handleSystemThemeChanged = (_: any, newSystemTheme: 'light' | 'dark') => {
+      setSystemTheme(newSystemTheme);
+    };
+    
     ipcRenderer.on('settings-updated', handleSettingsUpdated);
+    ipcRenderer.on('theme-changed', handleThemeChanged);
+    ipcRenderer.on('system-theme-changed', handleSystemThemeChanged);
     
     return () => {
       ipcRenderer.removeListener('settings-updated', handleSettingsUpdated);
+      ipcRenderer.removeListener('theme-changed', handleThemeChanged);
+      ipcRenderer.removeListener('system-theme-changed', handleSystemThemeChanged);
     };
   }, []);
 

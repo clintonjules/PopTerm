@@ -164,7 +164,6 @@
   <div class="settings-container">
     <div class="settings-content">
       <div class="settings-group">
-        <div class="settings-group-title">Appearance</div>
         <div class="settings-option">
           <div class="settings-label">Theme</div>
           <select id="theme-select">
@@ -176,7 +175,6 @@
       </div>
 
       <div class="settings-group">
-        <div class="settings-group-title">Window</div>
         <div class="settings-option">
           <div class="settings-label">Window Position</div>
           <select id="position-select">
@@ -194,7 +192,6 @@
       </div>
 
       <div class="settings-group">
-        <div class="settings-group-title">Keyboard Shortcuts</div>
         <div class="settings-option" style="flex-direction: column; align-items: flex-start; gap: 8px;">
           <div class="settings-label">Global Shortcut</div>
           <div style="display: flex; width: 100%; gap: 8px;">
@@ -202,7 +199,7 @@
               <input type="checkbox" id="shortcut-control"> <span id="control-key-label">Ctrl</span>
             </label>
             <label style="display: flex; align-items: center; margin-right: 10px;">
-              <input type="checkbox" id="shortcut-alt"> Alt
+              <input type="checkbox" id="shortcut-alt"> <span id="alt-key-label">Alt</span>
             </label>
             <label style="display: flex; align-items: center; margin-right: 10px;">
               <input type="checkbox" id="shortcut-shift"> Shift
@@ -262,13 +259,11 @@
               <option value="Escape">Escape</option>
             </select>
           </div>
-          <div id="current-shortcut" style="font-size: 12px; margin-top: 4px; color: #666;"></div>
+          <div id="active-shortcut" style="font-size: 12px; margin-top: 8px; color: #666;">
+            Currently active: <span id="active-shortcut-display"></span>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="settings-footer">
-      <button class="secondary" id="cancel-button">Cancel</button>
-      <button id="save-button">Save</button>
     </div>
   </div>
 
@@ -296,21 +291,18 @@
     
     const themeSelect = document.getElementById('theme-select');
     const positionSelect = document.getElementById('position-select');
-    const saveButton = document.getElementById('save-button');
-    const cancelButton = document.getElementById('cancel-button');
-    
     const shortcutControl = document.getElementById('shortcut-control');
     const shortcutAlt = document.getElementById('shortcut-alt');
     const shortcutShift = document.getElementById('shortcut-shift');
     const shortcutKey = document.getElementById('shortcut-key');
-    const currentShortcut = document.getElementById('current-shortcut');
     const controlKeyLabel = document.getElementById('control-key-label');
+    const altKeyLabel = document.getElementById('alt-key-label');
+    const activeShortcutDisplay = document.getElementById('active-shortcut-display');
     
-    // Determine if we're on Mac
     const isMac = os.platform() === 'darwin';
     
-    // Set the appropriate modifier key label
     controlKeyLabel.textContent = isMac ? 'Cmd' : 'Ctrl';
+    altKeyLabel.textContent = isMac ? 'Option' : 'Alt';
     
     let settings = {
       theme: THEME.SYSTEM,
@@ -323,21 +315,25 @@
       }
     };
     
-    let hasUnsavedChanges = false;
-    let originalSettings = {};
-    let isClosingManually = false;
-    
     function updateCurrentShortcutDisplay() {
       const parts = [];
       if (shortcutControl.checked) parts.push(isMac ? 'Cmd' : 'Ctrl');
-      if (shortcutAlt.checked) parts.push('Alt');
+      if (shortcutAlt.checked) parts.push(isMac ? 'Option' : 'Alt');
       if (shortcutShift.checked) parts.push('Shift');
       if (shortcutKey.value) parts.push(shortcutKey.value);
+    }
+    
+    function updateActiveShortcutDisplay() {
+      const parts = [];
+      if (settings.shortcut?.control) parts.push(isMac ? 'Cmd' : 'Ctrl');
+      if (settings.shortcut?.alt) parts.push(isMac ? 'Option' : 'Alt');
+      if (settings.shortcut?.shift) parts.push('Shift');
+      if (settings.shortcut?.key) parts.push(settings.shortcut.key);
       
       if (parts.length > 0) {
-        currentShortcut.textContent = `Current shortcut: ${parts.join('+')}`;
+        activeShortcutDisplay.textContent = parts.join('+');
       } else {
-        currentShortcut.textContent = 'No shortcut set';
+        activeShortcutDisplay.textContent = 'None';
       }
     }
     
@@ -350,13 +346,22 @@
       }
     }
     
-    function checkForChanges() {
-      return settings.theme !== originalSettings.theme || 
-             settings.position !== originalSettings.position ||
-             settings.shortcut.control !== originalSettings.shortcut?.control ||
-             settings.shortcut.alt !== originalSettings.shortcut?.alt ||
-             settings.shortcut.shift !== originalSettings.shortcut?.shift ||
-             settings.shortcut.key !== originalSettings.shortcut?.key;
+    function saveSettings() {
+      settings.theme = themeSelect.value;
+      settings.position = positionSelect.value;
+      settings.shortcut = {
+        control: shortcutControl.checked,
+        alt: shortcutAlt.checked,
+        shift: shortcutShift.checked,
+        key: shortcutKey.value
+      };
+      
+      try {
+        localStorage.setItem('popterm-settings', JSON.stringify(settings));
+        ipcRenderer.send('settings-updated', settings);
+      } catch (error) {
+        console.error('Failed to save settings:', error);
+      }
     }
     
     function loadSettings() {
@@ -380,8 +385,6 @@
             };
           }
           
-          originalSettings = JSON.parse(JSON.stringify(settings));
-          
           themeSelect.value = settings.theme;
           positionSelect.value = settings.position;
           
@@ -391,85 +394,54 @@
           shortcutKey.value = settings.shortcut.key;
           
           updateCurrentShortcutDisplay();
+          updateActiveShortcutDisplay();
           applyTheme(settings.theme);
         }
-      } catch (error) {
-        console.error('Failed to load settings:', error);
-      }
-    }
-    
-    function saveSettings() {
-      settings.theme = themeSelect.value;
-      settings.position = positionSelect.value;
-      settings.shortcut = {
-        control: shortcutControl.checked,
-        alt: shortcutAlt.checked,
-        shift: shortcutShift.checked,
-        key: shortcutKey.value
-      };
-      
-      try {
-        localStorage.setItem('popterm-settings', JSON.stringify(settings));
-        ipcRenderer.send('settings-updated', settings);
-        hasUnsavedChanges = false;
-        isClosingManually = true;
-        window.close();
       } catch (error) {
         console.error('Failed to save settings:', error);
       }
     }
     
-    function handleCloseAttempt(e) {
-      if (checkForChanges() && !isClosingManually) {
-        ipcRenderer.send('settings-close-attempted');
-        e.preventDefault();
-      }
-    }
-    
-    saveButton.addEventListener('click', saveSettings);
-    
-    cancelButton.addEventListener('click', () => {
-      isClosingManually = true;
-      window.close();
-    });
-    
     themeSelect.addEventListener('change', () => {
       settings.theme = themeSelect.value;
       applyTheme(settings.theme);
-      hasUnsavedChanges = checkForChanges();
+      
+      ipcRenderer.send('theme-changed', settings.theme);
+      
+      saveSettings();
     });
     
     positionSelect.addEventListener('change', () => {
       settings.position = positionSelect.value;
-      hasUnsavedChanges = checkForChanges();
+      
+      saveSettings();
     });
     
     shortcutControl.addEventListener('change', () => {
-      hasUnsavedChanges = checkForChanges();
       updateCurrentShortcutDisplay();
+      
+      saveSettings();
     });
     
     shortcutAlt.addEventListener('change', () => {
-      hasUnsavedChanges = checkForChanges();
       updateCurrentShortcutDisplay();
+      
+      saveSettings();
     });
     
     shortcutShift.addEventListener('change', () => {
-      hasUnsavedChanges = checkForChanges();
       updateCurrentShortcutDisplay();
+      
+      saveSettings();
     });
     
     shortcutKey.addEventListener('change', () => {
-      hasUnsavedChanges = checkForChanges();
       updateCurrentShortcutDisplay();
+      
+      saveSettings();
     });
     
-    ipcRenderer.on('settings-close-confirmed', () => {
-      isClosingManually = true;
-      window.close();
-    });
-    
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    ipcRenderer.on('system-theme-changed', (event, newSystemTheme) => {
       if (settings.theme === THEME.SYSTEM) {
         applyTheme(THEME.SYSTEM);
       }
@@ -478,7 +450,6 @@
     ipcRenderer.on('settings-response', (event, mainSettings) => {
       if (mainSettings) {
         settings = { ...settings, ...mainSettings };
-        originalSettings = JSON.parse(JSON.stringify(settings));
         
         if (settings.theme) {
           themeSelect.value = settings.theme;
@@ -493,13 +464,18 @@
           shortcutShift.checked = settings.shortcut.shift;
           shortcutKey.value = settings.shortcut.key || '';
           updateCurrentShortcutDisplay();
+          updateActiveShortcutDisplay();
         }
         
         applyTheme(settings.theme);
       }
     });
     
-    window.addEventListener('beforeunload', handleCloseAttempt);
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (settings.theme === THEME.SYSTEM) {
+        applyTheme(THEME.SYSTEM);
+      }
+    });
     
     loadSettings();
   </script>

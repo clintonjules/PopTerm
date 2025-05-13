@@ -8,10 +8,10 @@ A modern, minimal popup terminal interface built with Electron, React, and TypeS
 - Output is only shown when needed and can be expanded/collapsed
 - Compact, transparent, borderless window that can be dragged anywhere
 - Native menu integration across all platforms
-- Dark and light mode support with system theme detection
+- Dark and light mode support with system theme detection and real-time synchronization
 - Tab completion for commands and file paths
 - Command history navigation with arrow keys
-- Configurable settings that persist between sessions
+- Configurable settings with instant application
 - Cross-platform compatibility (macOS, Linux, Windows)
 
 ## Settings
@@ -19,6 +19,10 @@ A modern, minimal popup terminal interface built with Electron, React, and TypeS
 PopTerm offers a settings window where you can customize:
 
 - Theme (Light, Dark, or System)
+- Window Position (9 different positions on screen)
+- Global Shortcut (customizable keyboard combination)
+
+All settings are applied instantly without requiring a save button. The theme is always synchronized between all application windows in real-time.
 
 Access the settings through:
 - The PopTerm menu in the menu bar (Preferences option)
@@ -36,6 +40,9 @@ Access the settings through:
 - **Cmd/Ctrl+0**: Reset zoom
 - **Tab**: Complete command or path
 - **Up/Down arrows**: Navigate command history
+- **Custom Global Shortcut**: Toggle PopTerm visibility (configurable in settings)
+
+> Note: On macOS, "Ctrl" is shown as "Cmd" and "Alt" is shown as "Option" in the application interface.
 
 ## Development
 
@@ -95,6 +102,7 @@ PopTerm provides a simple interface to your system's native terminal:
 - Built with Electron for cross-platform desktop capabilities
 - React with TypeScript for UI components and type safety
 - Styled Components for theming and styling
-- IPC communication between Electron main and renderer processes
+- IPC communication between Electron main and renderer processes for real-time theme synchronization
 - Native menu integration across all supported platforms
 - Platform-specific optimizations for macOS, Linux, and Windows
+- Global shortcut registration for quick access from anywhere
