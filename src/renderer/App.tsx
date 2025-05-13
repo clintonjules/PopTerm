@@ -147,21 +147,23 @@ const SettingsFooter = styled.div`
 `;
 
 const SettingsButton = styled.button`
-  background-color: var(--accent-color);
-  color: #fff;
+  background: transparent;
   border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
+  color: #999;
   cursor: pointer;
-  font-weight: bold;
+  outline: none;
+  -webkit-app-region: no-drag;
+  font-size: 25px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 5px;
   
   &:hover {
-    opacity: 0.9;
-  }
-  
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
+    color: var(--accent-color);
   }
 `;
 
@@ -226,6 +228,8 @@ interface DragHandleProps {
 
 const DragHandle = styled.div<DragHandleProps>`
   width: 15px;
+  min-width: 15px;
+  max-width: 15px;
   height: 100%;
   background-color: ${props => props.theme === Theme.LIGHT ? 'rgba(200, 200, 200, 0.8)' : 'rgba(50, 50, 50, 0.8)'};
   cursor: grab;
@@ -234,6 +238,7 @@ const DragHandle = styled.div<DragHandleProps>`
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   
   &:hover {
     background-color: ${props => props.theme === Theme.LIGHT ? 'rgba(180, 180, 180, 0.8)' : 'rgba(70, 70, 70, 0.8)'};
@@ -343,6 +348,7 @@ const InputContainer = styled.div<InputContainerProps>`
   max-height: 45px; 
   box-sizing: border-box;
   position: relative;
+  width: 100%;
 `;
 
 const Prompt = styled.span`
@@ -352,10 +358,12 @@ const Prompt = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 150px;
+  flex-shrink: 0;
 `;
 
 const Input = styled.input`
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   color: var(--text-color);
@@ -370,6 +378,7 @@ const Input = styled.input`
   vertical-align: middle;
   padding: 0;
   caret-color: var(--accent-color);
+  margin-right: 8px;
   
   &::placeholder {
     color: var(--text-color);
@@ -377,12 +386,20 @@ const Input = styled.input`
   }
 `;
 
+const ButtonGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  margin-left: auto;
+`;
+
 interface ToggleButtonProps {
   $expanded: boolean;
   $hasOutput: boolean;
 }
 
-const ToggleButton = styled.button<ToggleButtonProps>`
+const ToggleButton = styled.button<ToggleButtonProps & { $blink?: boolean }>`
   background: transparent;
   border: none;
   color: ${props => props.$hasOutput ? '#999' : '#555'};
@@ -392,9 +409,21 @@ const ToggleButton = styled.button<ToggleButtonProps>`
   outline: none;
   -webkit-app-region: no-drag;
   font-size: 14px;
+  margin-right: 0;
   
   &:hover {
     color: ${props => props.$hasOutput ? 'var(--accent-color)' : '#555'};
+  }
+  
+  ${props => props.$blink && !props.$expanded && `
+    animation: blink-arrow 1.4s ease-in-out infinite;
+  `}
+
+  @keyframes blink-arrow {
+    0% { opacity: 1; }
+    45% { opacity: 0.2; }
+    55% { opacity: 0.2; }
+    100% { opacity: 1; }
   }
 `;
 
@@ -404,7 +433,7 @@ interface OutputContainerProps {
 
 const OutputContainer = styled.div<OutputContainerProps>`
   overflow: hidden;
-  max-height: ${props => props.$expanded ? "calc(10 * 1.2em)" : "0"};
+  max-height: ${props => props.$expanded ? "none" : "0"};
   opacity: ${props => props.$expanded ? "1" : "0"};
   transition: max-height 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.2s ease-in-out;
   padding: ${props => props.$expanded ? "8px 16px" : "0 16px"};
@@ -486,6 +515,8 @@ const App: React.FC = () => {
   const actualTheme = settings.theme === Theme.SYSTEM 
     ? (systemTheme === 'light' ? Theme.LIGHT : Theme.DARK)
     : settings.theme;
+
+  const [unreadOutput, setUnreadOutput] = useState(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
@@ -576,6 +607,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleOutput = (_: any, data: { output: string, type: 'stdout' | 'stderr' }) => {
       setOutputLines(prev => [...prev, { content: data.output, type: data.type }]);
+      if (!expanded) {
+        setUnreadOutput(true);
+      }
     };
 
     const handleComplete = () => {
@@ -629,7 +663,7 @@ const App: React.FC = () => {
       ipcRenderer.removeListener('zoom-out', handleZoomOut);
       ipcRenderer.removeListener('zoom-reset', handleZoomReset);
     };
-  }, [hasOutput, clearOutput, toggleExpanded]); 
+  }, [expanded, hasOutput, clearOutput, toggleExpanded]); 
 
   
   const handleTabCompletion = () => {
@@ -861,6 +895,12 @@ const App: React.FC = () => {
     }, 0);
   };
 
+  useEffect(() => {
+    if (expanded) {
+      setUnreadOutput(false);
+    }
+  }, [expanded]);
+
   return (
     <>
       <GlobalStyle $scale={scale} $theme={actualTheme} />
@@ -878,14 +918,23 @@ const App: React.FC = () => {
               disabled={isExecuting}
               autoFocus
             />
-            <ToggleButton 
-              $expanded={expanded} 
-              $hasOutput={hasOutput}
-              onClick={toggleExpanded}
-              title={hasOutput ? (expanded ? "Collapse" : "Expand") : "No output to show"}
-            >
-              ▼
-            </ToggleButton>
+            <ButtonGroup>
+              <ToggleButton 
+                $expanded={expanded} 
+                $hasOutput={hasOutput}
+                $blink={unreadOutput}
+                onClick={toggleExpanded}
+                title={hasOutput ? (expanded ? "Collapse" : "Expand") : "No output to show"}
+              >
+                ▼
+              </ToggleButton>
+              <SettingsButton
+                onClick={() => ipcRenderer.send('open-settings')}
+                title="Settings"
+              >
+                ⚙
+              </SettingsButton>
+            </ButtonGroup>
             
             {showAutocomplete && autocompleteMatches.length > 0 && (
               <AutocompleteContainer>

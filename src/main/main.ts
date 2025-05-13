@@ -19,58 +19,69 @@ let currentWorkingDirectory = os.homedir();
 
 const defaultSettings = {
   theme: 'system',
-  position: 'center'
+  position: 'center',
+  shortcut: {
+    control: true,
+    alt: true,
+    shift: false,
+    key: 'T'
+  }
 };
 
 
 let appSettings = { ...defaultSettings };
+let registeredShortcut: string | null = null;
 
 
 function positionWindow(win: BrowserWindow) {
   const { width, height } = win.getBounds();
-  const screenBounds = screen.getPrimaryDisplay().workAreaSize;
   
-  const padding = 20; 
+  // Get the current screen where the cursor is
+  const point = screen.getCursorScreenPoint();
+  const currentDisplay = screen.getDisplayNearestPoint(point);
+  const screenBounds = currentDisplay.workArea;
+  
+  const padding = 20;
   
   let x, y;
   
   switch (appSettings.position) {
     case 'top-center':
-      x = Math.round((screenBounds.width - width) / 2);
-      y = padding;
+      x = Math.round(screenBounds.x + (screenBounds.width - width) / 2);
+      y = screenBounds.y + padding;
       break;
     case 'top-right':
-      x = screenBounds.width - width - padding;
-      y = padding;
+      x = screenBounds.x + screenBounds.width - width - padding;
+      y = screenBounds.y + padding;
       break;
     case 'top-left':
-      x = padding;
-      y = padding;
+      x = screenBounds.x + padding;
+      y = screenBounds.y + padding;
       break;
     case 'bottom-center':
-      x = Math.round((screenBounds.width - width) / 2);
-      y = screenBounds.height - height - padding;
+      x = Math.round(screenBounds.x + (screenBounds.width - width) / 2);
+      y = screenBounds.y + screenBounds.height - height - padding;
       break;
     case 'bottom-right':
-      x = screenBounds.width - width - padding;
-      y = screenBounds.height - height - padding;
+      x = screenBounds.x + screenBounds.width - width - padding;
+      y = screenBounds.y + screenBounds.height - height - padding;
       break;
     case 'bottom-left':
-      x = padding;
-      y = screenBounds.height - height - padding;
+      x = screenBounds.x + padding;
+      y = screenBounds.y + screenBounds.height - height - padding;
       break;
     case 'center-right':
-      x = screenBounds.width - width - padding;
-      y = Math.round((screenBounds.height - height) / 2);
+      x = screenBounds.x + screenBounds.width - width - padding;
+      y = Math.round(screenBounds.y + (screenBounds.height - height) / 2);
       break;
     case 'center-left':
-      x = padding;
-      y = Math.round((screenBounds.height - height) / 2);
+      x = screenBounds.x + padding;
+      y = Math.round(screenBounds.y + (screenBounds.height - height) / 2);
       break;
     case 'center':
     default:
-      x = Math.round((screenBounds.width - width) / 2);
-      y = Math.round((screenBounds.height - height) / 2);
+      x = Math.round(screenBounds.x + (screenBounds.width - width) / 2);
+      y = Math.round(screenBounds.y + (screenBounds.height - height) / 2);
       break;
   }
   
@@ -84,6 +95,9 @@ function loadSettings() {
       const settingsData = fs.readFileSync(path.join(app.getPath('userData'), 'settings.json'), 'utf8');
       const savedSettings = JSON.parse(settingsData);
       appSettings = { ...defaultSettings, ...savedSettings };
+      
+      // Apply the shortcut
+      registerGlobalShortcut();
     }
   } catch (error) {
     console.error('Failed to load settings:', error);
@@ -96,12 +110,59 @@ function saveSettings(settings: any) {
     fs.writeFileSync(path.join(app.getPath('userData'), 'settings.json'), JSON.stringify(settings));
     appSettings = { ...settings };
     
-    
+    // Apply new settings
     if (mainWindow) {
       positionWindow(mainWindow);
     }
+    
+    // Update global shortcut
+    registerGlobalShortcut();
   } catch (error) {
     console.error('Failed to save settings:', error);
+  }
+}
+
+function registerGlobalShortcut() {
+  // First unregister any existing shortcut
+  if (registeredShortcut) {
+    globalShortcut.unregister(registeredShortcut);
+    registeredShortcut = null;
+  }
+  
+  // Construct the accelerator string
+  const { shortcut } = appSettings;
+  if (!shortcut || !shortcut.key) return;
+  
+  const modifiers = [];
+  if (shortcut.control) modifiers.push('CommandOrControl');
+  if (shortcut.alt) modifiers.push('Alt');
+  if (shortcut.shift) modifiers.push('Shift');
+  
+  if (modifiers.length === 0 || !shortcut.key) {
+    console.log('No valid shortcut configuration provided');
+    return;
+  }
+  
+  const accelerator = [...modifiers, shortcut.key].join('+');
+  registeredShortcut = accelerator;
+  
+  const shortcutRegistered = globalShortcut.register(accelerator, () => {
+    // Toggle the window (show/hide)
+    if (mainWindow && mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      createNewWindowIfNotExists();
+    }
+  });
+  
+  // For display purposes, show the correct modifier key based on platform
+  const isMac = process.platform === 'darwin';
+  const displayAccelerator = accelerator.replace('CommandOrControl', isMac ? 'Cmd' : 'Ctrl');
+  
+  if (!shortcutRegistered) {
+    console.error(`Global shortcut registration failed: ${displayAccelerator}`);
+  } else {
+    console.log(`Global shortcut registered: ${displayAccelerator}`);
   }
 }
 
@@ -119,34 +180,92 @@ function createWindow() {
     alwaysOnTop: true,
     minHeight: DEFAULT_HEIGHT,
     minWidth: 300,
+    skipTaskbar: false,
+    focusable: true,
+    hasShadow: true,
+    fullscreenable: false,
+    acceptFirstMouse: true,
+    type: 'panel',
+    show: false,
+    x: screen.getCursorScreenPoint().x - DEFAULT_WIDTH / 2,
+    y: screen.getCursorScreenPoint().y - DEFAULT_HEIGHT / 2
   });
 
   if (mainWindow) {
     mainWindow.setMaximumSize(30000, DEFAULT_HEIGHT);
     
+    if (process.platform === 'darwin') {
+      if (app.dock && typeof app.dock.show === 'function') {
+        app.dock.show();
+      }
+      mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    } else {
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    }
     
     positionWindow(mainWindow);
   }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   
+  mainWindow.once('ready-to-show', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+  
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
   
+  // Close button should hide the window, not close it
+  mainWindow.on('close', (event) => {
+    if (mainWindow && mainWindow.isVisible()) {
+      event.preventDefault();
+      mainWindow.hide();
+      return false;
+    }
+  });
+  
   createApplicationMenu();
+  mainWindow.setMenuBarVisibility(true);
+  mainWindow.setAutoHideMenuBar(false);
 }
 
 function createNewWindowIfNotExists(): BrowserWindow {
   if (!mainWindow) {
     createWindow();
   } else if (!mainWindow.isVisible()) {
-    mainWindow.show();
-    
+    // Show window and ensure it is properly positioned and focused
     positionWindow(mainWindow);
+    
+    // Ensure window appears over fullscreen apps
+    if (process.platform === 'darwin') {
+      mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+    } else {
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    }
+    
+    // Move window to the current screen if needed
+    const point = screen.getCursorScreenPoint();
+    const currentDisplay = screen.getDisplayNearestPoint(point);
+    const screenBounds = currentDisplay.workArea;
+    const [x, y] = mainWindow.getPosition();
+    
+    // Check if window is on a different screen
+    if (x < screenBounds.x || x > screenBounds.x + screenBounds.width ||
+        y < screenBounds.y || y > screenBounds.y + screenBounds.height) {
+      positionWindow(mainWindow);
+    }
+    
+    mainWindow.show();
     mainWindow.focus();
   } else {
-    mainWindow.focus();
+    // Hide the window instead of just focusing it
+    mainWindow.hide();
   }
   
   return mainWindow!;
@@ -251,6 +370,16 @@ function createApplicationMenu() {
           }
         },
         {
+          label: 'Toggle Terminal',
+          click: () => {
+            if (mainWindow && mainWindow.isVisible()) {
+              mainWindow.hide();
+            } else {
+              createNewWindowIfNotExists();
+            }
+          }
+        },
+        {
           label: 'Clear Terminal',
           accelerator: 'CmdOrCtrl+K',
           click: () => {
@@ -261,7 +390,7 @@ function createApplicationMenu() {
         },
         { type: 'separator' },
         {
-          label: 'Close Window',
+          label: 'Hide Window',
           accelerator: 'CmdOrCtrl+W',
           click: () => {
             if (mainWindow) {
@@ -369,21 +498,9 @@ function createApplicationMenu() {
 }
 
 app.whenReady().then(() => {
-  
   loadSettings();
   
   createWindow();
-  
-  
-  const shortcutRegistered = globalShortcut.register('CommandOrControl+Alt+T', () => {
-    createNewWindowIfNotExists();
-  });
-  
-  if (!shortcutRegistered) {
-    console.error('Global shortcut registration failed');
-  } else {
-    console.log('Global shortcut registered: CommandOrControl+Alt+T');
-  }
   
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -400,6 +517,11 @@ app.setAboutPanelOptions({
 });
 
 app.on('will-quit', () => {
+  // Clean up by unregistering all shortcuts
+  if (registeredShortcut) {
+    globalShortcut.unregister(registeredShortcut);
+    registeredShortcut = null;
+  }
   globalShortcut.unregisterAll();
 });
 
@@ -412,8 +534,15 @@ app.on('window-all-closed', () => {
 ipcMain.on('execute-command', (event, command: string) => {
   const trimmedCommand = command.trim();
   
-  if (trimmedCommand.startsWith('cd ')) {
-    const targetDir = trimmedCommand.substring(3).trim();
+  if (trimmedCommand === 'cd' || trimmedCommand.startsWith('cd ')) {
+    let targetDir = '';
+    
+    if (trimmedCommand === 'cd') {
+      targetDir = '~';
+    } else {
+      targetDir = trimmedCommand.substring(3).trim();
+    }
+    
     let newDir = targetDir;
     
     if (!path.isAbsolute(targetDir)) {
