@@ -57,13 +57,12 @@
     }
     
     .dark-mode .settings-container {
-      background-color: #333;
+      background-color: #222222;
     }
     
     .settings-content {
       padding: 20px;
       flex: 1;
-      overflow: auto;
     }
     
     .settings-group {
@@ -158,6 +157,55 @@
     .dark-mode button.secondary:hover {
       background-color: rgba(255, 255, 255, 0.05);
     }
+    
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #4a8f69;
+    }
+    input:focus + .slider {
+      box-shadow: 0 0 1px #4a8f69;
+    }
+    input:checked + .slider:before {
+      transform: translateX(16px);
+    }
+    .slider.round {
+      border-radius: 24px;
+    }
+    .slider.round:before {
+      border-radius: 50%;
+    }
   </style>
 </head>
 <body>
@@ -194,17 +242,19 @@
       <div class="settings-group">
         <div class="settings-option" style="flex-direction: column; align-items: flex-start; gap: 8px;">
           <div class="settings-label">Global Shortcut</div>
-          <div style="display: flex; width: 100%; gap: 8px;">
-            <label style="display: flex; align-items: center; margin-right: 10px;">
-              <input type="checkbox" id="shortcut-control"> <span id="control-key-label">Ctrl</span>
-            </label>
-            <label style="display: flex; align-items: center; margin-right: 10px;">
-              <input type="checkbox" id="shortcut-alt"> <span id="alt-key-label">Alt</span>
-            </label>
-            <label style="display: flex; align-items: center; margin-right: 10px;">
-              <input type="checkbox" id="shortcut-shift"> Shift
-            </label>
-            <select id="shortcut-key" style="flex-grow: 1;">
+          <div style="display: flex; width: 100%; gap: 8px; justify-content: space-between;">
+            <div style="display: flex; gap: 8px;">
+              <label style="display: flex; align-items: center;">
+                <input type="checkbox" id="shortcut-control"> <span id="control-key-label">Ctrl</span>
+              </label>
+              <label style="display: flex; align-items: center;">
+                <input type="checkbox" id="shortcut-alt"> <span id="alt-key-label">Alt</span>
+              </label>
+              <label style="display: flex; align-items: center;">
+                <input type="checkbox" id="shortcut-shift"> Shift
+              </label>
+            </div>
+            <select id="shortcut-key" style="width: 120px;">
               <option value="">None</option>
               <option value="A">A</option>
               <option value="B">B</option>
@@ -264,6 +314,17 @@
           </div>
         </div>
       </div>
+
+      <div class="settings-group">
+        <div class="settings-option">
+          <div class="settings-label">Show Settings Icon in Terminal</div>
+          <label class="switch">
+            <input type="checkbox" id="show-settings-icon" checked>
+            <span class="slider round"></span>
+          </label>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -291,6 +352,7 @@
     
     const themeSelect = document.getElementById('theme-select');
     const positionSelect = document.getElementById('position-select');
+    const showSettingsIconCheckbox = document.getElementById('show-settings-icon');
     const shortcutControl = document.getElementById('shortcut-control');
     const shortcutAlt = document.getElementById('shortcut-alt');
     const shortcutShift = document.getElementById('shortcut-shift');
@@ -307,6 +369,7 @@
     let settings = {
       theme: THEME.SYSTEM,
       position: POSITION.CENTER,
+      showSettingsIcon: true,
       shortcut: {
         control: true,
         alt: true,
@@ -349,6 +412,7 @@
     function saveSettings() {
       settings.theme = themeSelect.value;
       settings.position = positionSelect.value;
+      settings.showSettingsIcon = showSettingsIconCheckbox.checked;
       settings.shortcut = {
         control: shortcutControl.checked,
         alt: shortcutAlt.checked,
@@ -387,6 +451,7 @@
           
           themeSelect.value = settings.theme;
           positionSelect.value = settings.position;
+          showSettingsIconCheckbox.checked = settings.showSettingsIcon !== false;
           
           shortcutControl.checked = settings.shortcut.control;
           shortcutAlt.checked = settings.shortcut.alt;
@@ -414,6 +479,11 @@
     positionSelect.addEventListener('change', () => {
       settings.position = positionSelect.value;
       
+      saveSettings();
+    });
+    
+    showSettingsIconCheckbox.addEventListener('change', () => {
+      settings.showSettingsIcon = showSettingsIconCheckbox.checked;
       saveSettings();
     });
     
@@ -457,6 +527,8 @@
         if (settings.position) {
           positionSelect.value = settings.position;
         }
+        
+        showSettingsIconCheckbox.checked = settings.showSettingsIcon !== false;
         
         if (settings.shortcut) {
           shortcutControl.checked = settings.shortcut.control;

@@ -12,6 +12,7 @@ enum Theme {
 
 interface Settings {
   theme: Theme;
+  showSettingsIcon?: boolean;
 }
 
 const GlobalStyle = createGlobalStyle<{ $scale: number; $theme: Theme }>`
@@ -161,6 +162,8 @@ const SettingsButton = styled.button`
   width: 15px;
   height: 15px;
   margin-left: 5px;
+  min-width: 15px;
+  flex-shrink: 0;
   
   &:hover {
     color: var(--accent-color);
@@ -185,10 +188,12 @@ interface SettingsDialogProps {
 
 const SettingsDialogComponent: React.FC<SettingsDialogProps> = ({ settings, onSave, onClose }) => {
   const [theme, setTheme] = useState(settings.theme);
+  const [showSettingsIcon, setShowSettingsIcon] = useState(settings.showSettingsIcon !== false);
   
   const handleSave = () => {
     onSave({
-      theme
+      theme,
+      showSettingsIcon
     });
   };
   
@@ -210,6 +215,17 @@ const SettingsDialogComponent: React.FC<SettingsDialogProps> = ({ settings, onSa
               <option value={Theme.DARK}>Dark</option>
               <option value={Theme.SYSTEM}>System (follow OS)</option>
             </SettingsSelect>
+          </SettingsGroup>
+          <SettingsGroup>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={showSettingsIcon}
+                onChange={e => setShowSettingsIcon(e.target.checked)}
+                id="settings-icon-checkbox"
+              />
+              <SettingsLabel htmlFor="settings-icon-checkbox">Show settings icon in terminal</SettingsLabel>
+            </div>
           </SettingsGroup>
         </SettingsContent>
         <SettingsFooter>
@@ -349,6 +365,7 @@ const InputContainer = styled.div<InputContainerProps>`
   box-sizing: border-box;
   position: relative;
   width: 100%;
+  overflow: hidden;
 `;
 
 const Prompt = styled.span`
@@ -379,6 +396,7 @@ const Input = styled.input`
   padding: 0;
   caret-color: var(--accent-color);
   margin-right: 8px;
+  text-overflow: ellipsis;
   
   &::placeholder {
     color: var(--text-color);
@@ -392,6 +410,8 @@ const ButtonGroup = styled.div`
   gap: 1px;
   flex-shrink: 0;
   margin-left: auto;
+  min-width: 40px;
+  justify-content: flex-end;
 `;
 
 interface ToggleButtonProps {
@@ -505,7 +525,8 @@ const App: React.FC = () => {
   const [scale, setScale] = useState(1);
   
   const [settings, setSettings] = useState<Settings>({
-    theme: Theme.DARK
+    theme: Theme.DARK,
+    showSettingsIcon: true
   });
   
   const outputRef = useRef<HTMLDivElement>(null);
@@ -519,11 +540,11 @@ const App: React.FC = () => {
   const [unreadOutput, setUnreadOutput] = useState(false);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
-    setSystemTheme(mediaQuery.matches ? 'light' : 'dark');
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    setSystemTheme(mediaQuery.matches ? 'dark' : 'light');
     
     const handler = (e: MediaQueryListEvent) => {
-      setSystemTheme(e.matches ? 'light' : 'dark');
+      setSystemTheme(e.matches ? 'dark' : 'light');
     };
     
     mediaQuery.addEventListener('change', handler);
@@ -954,12 +975,14 @@ const App: React.FC = () => {
               >
                 ▼
               </ToggleButton>
-              <SettingsButton
-                onClick={() => ipcRenderer.send('open-settings')}
-                title="Settings"
-              >
-                ⚙
-              </SettingsButton>
+              {(settings.showSettingsIcon !== false) && (
+                <SettingsButton
+                  onClick={() => ipcRenderer.send('open-settings')}
+                  title="Settings"
+                >
+                  ⚙
+                </SettingsButton>
+              )}
             </ButtonGroup>
             
             {showAutocomplete && autocompleteMatches.length > 0 && (

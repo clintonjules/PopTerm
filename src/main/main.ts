@@ -1,9 +1,8 @@
-import { app, BrowserWindow, ipcMain, globalShortcut, screen, Menu, nativeTheme, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, globalShortcut, screen, Menu, nativeTheme, dialog, Tray, nativeImage } from 'electron';
 import * as path from 'path';
 import * as os from 'os';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
-
 
 app.setName('PopTerm');
 app.name = 'PopTerm';
@@ -15,11 +14,15 @@ const DEFAULT_WIDTH = 500;
 const EXPANDED_HEIGHT = 200;
 let isExpanded = false;
 let currentWorkingDirectory = os.homedir();
-
+let lastWindowPosition: { x: number, y: number } | null = null;
+let tray: Tray | null = null;
+let trayContextMenu: Menu | null = null;
+let isExplicitlyQuitting = false;
 
 const defaultSettings = {
   theme: 'system',
   position: 'center',
+  showSettingsIcon: true,
   shortcut: {
     control: true,
     alt: true,
@@ -28,20 +31,15 @@ const defaultSettings = {
   }
 };
 
-
 let appSettings = { ...defaultSettings };
 let registeredShortcut: string | null = null;
 
-
 function positionWindow(win: BrowserWindow) {
   const { width, height } = win.getBounds();
-  
   const point = screen.getCursorScreenPoint();
   const currentDisplay = screen.getDisplayNearestPoint(point);
   const screenBounds = currentDisplay.workArea;
-  
   const padding = 20;
-  
   let x, y;
   
   switch (appSettings.position) {
@@ -87,14 +85,12 @@ function positionWindow(win: BrowserWindow) {
   win.setPosition(x, y);
 }
 
-
 function loadSettings() {
   try {
     if (fs.existsSync(path.join(app.getPath('userData'), 'settings.json'))) {
       const settingsData = fs.readFileSync(path.join(app.getPath('userData'), 'settings.json'), 'utf8');
       const savedSettings = JSON.parse(settingsData);
       appSettings = { ...defaultSettings, ...savedSettings };
-      
       registerGlobalShortcut();
     }
   } catch (error) {
@@ -102,16 +98,13 @@ function loadSettings() {
   }
 }
 
-
 function saveSettings(settings: any) {
   try {
     fs.writeFileSync(path.join(app.getPath('userData'), 'settings.json'), JSON.stringify(settings));
     appSettings = { ...settings };
-    
     if (mainWindow) {
       positionWindow(mainWindow);
     }
-    
     registerGlobalShortcut();
   } catch (error) {
     console.error('Failed to save settings:', error);
@@ -142,9 +135,10 @@ function registerGlobalShortcut() {
   
   const shortcutRegistered = globalShortcut.register(accelerator, () => {
     if (mainWindow && mainWindow.isVisible()) {
+      lastWindowPosition = { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] };
       mainWindow.hide();
     } else {
-      createNewWindowIfNotExists();
+      toggleTerminalWindow();
     }
   });
   
@@ -173,8 +167,8 @@ function createWindow() {
     resizable: true,
     alwaysOnTop: true,
     minHeight: DEFAULT_HEIGHT,
-    minWidth: 300,
-    skipTaskbar: false,
+    minWidth: 350,
+    skipTaskbar: true,
     focusable: true,
     hasShadow: true,
     fullscreenable: false,
@@ -187,17 +181,12 @@ function createWindow() {
 
   if (mainWindow) {
     mainWindow.setMaximumSize(30000, DEFAULT_HEIGHT);
-    
     if (process.platform === 'darwin') {
-      if (app.dock && typeof app.dock.show === 'function') {
-        app.dock.show();
-      }
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
     } else {
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
     }
-    
     positionWindow(mainWindow);
   }
 
@@ -205,6 +194,10 @@ function createWindow() {
   
   mainWindow.once('ready-to-show', () => {
     if (mainWindow) {
+      const isDarkTheme = appSettings.theme === 'dark' || 
+                         (appSettings.theme === 'system' && nativeTheme.shouldUseDarkColors);
+      mainWindow.webContents.send('theme-changed', appSettings.theme);
+      mainWindow.webContents.send('system-theme-changed', isDarkTheme ? 'dark' : 'light');
       mainWindow.show();
       mainWindow.focus();
     }
@@ -215,47 +208,58 @@ function createWindow() {
   });
   
   mainWindow.on('close', (event) => {
+    if (isExplicitlyQuitting) {
+      return;
+    }
     if (mainWindow && mainWindow.isVisible()) {
       event.preventDefault();
+      lastWindowPosition = { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] };
       mainWindow.hide();
-      return false;
     }
   });
   
-  createApplicationMenu();
   mainWindow.setMenuBarVisibility(true);
   mainWindow.setAutoHideMenuBar(false);
+  refreshMenus();
 }
 
-function createNewWindowIfNotExists(): BrowserWindow {
+function toggleTerminalWindow(): BrowserWindow {
   if (!mainWindow) {
     createWindow();
   } else if (!mainWindow.isVisible()) {
-    positionWindow(mainWindow);
-    
+    if (lastWindowPosition) {
+      const point = screen.getCursorScreenPoint();
+      const currentDisplay = screen.getDisplayNearestPoint(point);
+      const screenBounds = currentDisplay.workArea;
+      if (lastWindowPosition.x >= screenBounds.x && 
+          lastWindowPosition.x <= screenBounds.x + screenBounds.width - DEFAULT_WIDTH &&
+          lastWindowPosition.y >= screenBounds.y && 
+          lastWindowPosition.y <= screenBounds.y + screenBounds.height - DEFAULT_HEIGHT) {
+        mainWindow.setPosition(lastWindowPosition.x, lastWindowPosition.y);
+      } else {
+        positionWindow(mainWindow);
+      }
+    } else {
+      positionWindow(mainWindow);
+    }
     if (process.platform === 'darwin') {
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
     } else {
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
     }
-    
-    const point = screen.getCursorScreenPoint();
-    const currentDisplay = screen.getDisplayNearestPoint(point);
-    const screenBounds = currentDisplay.workArea;
-    const [x, y] = mainWindow.getPosition();
-    
-    if (x < screenBounds.x || x > screenBounds.x + screenBounds.width ||
-        y < screenBounds.y || y > screenBounds.y + screenBounds.height) {
-      positionWindow(mainWindow);
-    }
-    
+    const isDarkTheme = appSettings.theme === 'dark' || 
+                       (appSettings.theme === 'system' && nativeTheme.shouldUseDarkColors);
+    mainWindow.webContents.send('theme-changed', appSettings.theme);
+    mainWindow.webContents.send('system-theme-changed', isDarkTheme ? 'dark' : 'light');
     mainWindow.show();
     mainWindow.focus();
   } else {
-    mainWindow.hide();
+    if (mainWindow) {
+      lastWindowPosition = { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] };
+      mainWindow.hide();
+    }
   }
-  
   return mainWindow!;
 }
 
@@ -270,15 +274,15 @@ function createSettingsWindow() {
   
   settingsWindow = new BrowserWindow({
     width: 500,
-    height: 400,
+    height: 315,
     title: '',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
-    resizable: true,
-    minimizable: true,
-    maximizable: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
     frame: true,
     titleBarStyle: 'default',
     show: false,
@@ -299,7 +303,6 @@ function createSettingsWindow() {
       settingsWindow.focus();
     }
   });
-  
   
   const settingsMenu = Menu.buildFromTemplate([
     {
@@ -325,7 +328,7 @@ function createSettingsWindow() {
   });
 }
 
-function createApplicationMenu() {
+function generateApplicationMenuTemplate(): Electron.MenuItemConstructorOptions[] {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'PopTerm', 
@@ -333,7 +336,7 @@ function createApplicationMenu() {
         { role: 'about' },
         { type: 'separator' },
         {
-          label: 'Preferences',
+          label: 'Settings',
           accelerator: 'CmdOrCtrl+,',
           click: () => {
             createSettingsWindow();
@@ -353,19 +356,14 @@ function createApplicationMenu() {
       label: 'File',
       submenu: [
         {
-          label: 'New Window',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => {
-            createNewWindowIfNotExists();
-          }
-        },
-        {
           label: 'Toggle Terminal',
+          accelerator: 'CmdOrCtrl+T',
           click: () => {
             if (mainWindow && mainWindow.isVisible()) {
+              lastWindowPosition = { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] };
               mainWindow.hide();
             } else {
-              createNewWindowIfNotExists();
+              toggleTerminalWindow();
             }
           }
         },
@@ -375,16 +373,6 @@ function createApplicationMenu() {
           click: () => {
             if (mainWindow) {
               mainWindow.webContents.send('clear-terminal');
-            }
-          }
-        },
-        { type: 'separator' },
-        {
-          label: 'Hide Window',
-          accelerator: 'CmdOrCtrl+W',
-          click: () => {
-            if (mainWindow) {
-              mainWindow.hide();
             }
           }
         }
@@ -408,7 +396,7 @@ function createApplicationMenu() {
       label: 'View',
       submenu: [
         {
-          label: 'Toggle Output',
+          label: isExpanded ? 'Close Output' : 'Expand Output',
           accelerator: 'CmdOrCtrl+O',
           click: () => {
             if (mainWindow) {
@@ -482,16 +470,106 @@ function createApplicationMenu() {
       ]
     }
   ];
+  return template;
+}
 
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+function generateTrayContextMenuTemplate(): Electron.MenuItemConstructorOptions[] {
+  return [
+    { label: 'Toggle Terminal', click: () => toggleTerminalWindow() },
+    {
+      label: 'Clear Terminal',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('clear-terminal');
+        }
+      }
+    },
+    {
+      label: isExpanded ? 'Close Output' : 'Expand Output', 
+      click: () => {
+        if (mainWindow) {
+          mainWindow.webContents.send('toggle-output');
+        }
+      }
+    },
+    { label: 'Settings', click: () => createSettingsWindow() },
+    { type: 'separator' },
+    { 
+      label: 'Quit PopTerm', 
+      click: () => {
+        isExplicitlyQuitting = true;
+        app.quit();
+      } 
+    }
+  ];
+}
+
+function refreshMenus() {
+  const appMenuTemplate = generateApplicationMenuTemplate();
+  const appMenu = Menu.buildFromTemplate(appMenuTemplate);
+  Menu.setApplicationMenu(appMenu);
+  if (mainWindow) {
+    mainWindow.setMenuBarVisibility(true);
+    mainWindow.setAutoHideMenuBar(false);
+  }
+
+  if (tray) {
+    const trayMenuTemplate = generateTrayContextMenuTemplate();
+    trayContextMenu = Menu.buildFromTemplate(trayMenuTemplate);
+    tray.setContextMenu(trayContextMenu);
+  }
 }
 
 app.whenReady().then(() => {
   loadSettings();
   
+  if (app.dock) {
+    app.dock.hide();
+  }
+
   createWindow();
   
+  const iconName = process.platform === 'darwin' ? 'iconTemplate.png' : 'icon.png';
+  const iconPath = path.join(__dirname, 'assets', iconName);
+  let icon;
+  try {
+    icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) {
+      console.warn(`Tray icon file is empty or not found at ${iconPath}.`);
+      if (process.platform === 'darwin') {
+        console.log('Attempting to use a macOS system template image as fallback for tray.');
+        icon = nativeImage.createFromNamedImage('NSTouchBarUser');
+      }
+      if (icon.isEmpty()) {
+        console.error('Failed to load tray icon and macOS fallback. Tray icon will be invisible or default.');
+        icon = nativeImage.createEmpty();
+      }
+    }
+  } catch (error) {
+    console.error('Error creating tray icon from path:', error);
+    if (process.platform === 'darwin') {
+        icon = nativeImage.createFromNamedImage('NSTouchBarUser');
+    }
+    if (!icon || icon.isEmpty()) {
+        icon = nativeImage.createEmpty();
+    }
+  }
+
+  tray = new Tray(icon);
+
+  tray.setToolTip('PopTerm');
+  tray.on('click', () => {
+    if (process.platform === 'darwin') {
+      if (trayContextMenu) {
+        tray?.popUpContextMenu(trayContextMenu);
+      }
+    } else {
+      toggleTerminalWindow();
+    }
+  });
+  
+  refreshMenus();
+
   nativeTheme.on('updated', () => {
     if (appSettings.theme === 'system') {
       const isDarkTheme = nativeTheme.shouldUseDarkColors;
@@ -512,6 +590,8 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+    } else if (mainWindow && !mainWindow.isVisible()) {
+      toggleTerminalWindow();
     }
   });
 });
@@ -529,6 +609,9 @@ app.on('will-quit', () => {
     registeredShortcut = null;
   }
   globalShortcut.unregisterAll();
+  if (tray) {
+    tray.destroy();
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -703,6 +786,7 @@ ipcMain.on('toggle-expand', (event, expanded: boolean) => {
       }
     }, 100);
   }
+  refreshMenus();
 });
 
 ipcMain.on('tab-complete', (event, inputText: string) => {
@@ -796,7 +880,7 @@ ipcMain.on('open-settings', () => {
 });
 
 ipcMain.on('create-or-show-window', () => {
-  createNewWindowIfNotExists();
+  toggleTerminalWindow();
 });
 
 ipcMain.on('get-settings', (event) => {

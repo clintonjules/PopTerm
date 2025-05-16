@@ -12,6 +12,8 @@ A modern, minimal popup terminal interface built with Electron, React, and TypeS
 - Tab completion for commands and file paths
 - Command history navigation with arrow keys
 - Configurable settings with instant application
+- Global shortcut to toggle the terminal window visibility
+- Remembers last window position within a session
 - Cross-platform compatibility (macOS, Linux, Windows)
 
 ## Settings
@@ -32,7 +34,7 @@ Access the settings through:
 
 - **Cmd/Ctrl+,**: Open settings
 - **Cmd/Ctrl+K**: Clear terminal
-- **Cmd/Ctrl+W**: Hide window
+- **Cmd/Ctrl+T**: Toggle terminal window (show/hide)
 - **Cmd/Ctrl+Q**: Quit the application
 - **Cmd/Ctrl+O**: Toggle output display
 - **Cmd/Ctrl+=**: Zoom in
@@ -43,6 +45,12 @@ Access the settings through:
 - **Custom Global Shortcut**: Toggle PopTerm visibility (configurable in settings)
 
 > Note: On macOS, "Ctrl" is shown as "Cmd" and "Alt" is shown as "Option" in the application interface.
+
+## Usage
+
+- Only one terminal window is active at a time. Toggling the terminal will show or hide this window.
+- The window always reappears at the last position it was hidden during the session.
+- The terminal window is always on top and can be quickly accessed from anywhere using the global shortcut.
 
 ## Development
 
