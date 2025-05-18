@@ -288,6 +288,8 @@ const ContentContainer = styled.div`
   flex: 1;
   height: 100%;
   background-color: var(--bg-color);
+  position: relative;
+  overflow: visible;
   
   & > *:first-child {
     flex-shrink: 0;
@@ -309,20 +311,20 @@ const AutocompleteContainer = styled.div`
   border-top: 1px solid var(--border-color);
   max-height: 200px;
   overflow-y: auto;
-  z-index: 10;
+  z-index: 100;
 `;
 
 const AutocompleteItem = styled.div<{ $isSelected: boolean }>`
   padding: 6px 12px;
   cursor: pointer;
-  color: ${props => props.$isSelected ? '#fff' : 'var(--text-color)'};
-  background-color: ${props => props.$isSelected ? 'var(--accent-color)' : 'transparent'};
+  color: ${props => props.$isSelected ? 'var(--text-color)' : 'var(--text-color)'};
+  background-color: ${props => props.$isSelected ? 'rgba(180, 180, 180, 0.3)' : 'transparent'};
   display: flex;
   justify-content: space-between;
   align-items: center;
   
   &:hover {
-    background-color: ${props => props.$isSelected ? 'var(--accent-color)' : 'rgba(128, 128, 128, 0.2)'};
+    background-color: ${props => props.$isSelected ? 'rgba(180, 180, 180, 0.3)' : 'rgba(128, 128, 128, 0.2)'};
   }
   
   .directory {
@@ -336,14 +338,14 @@ const AutocompleteItem = styled.div<{ $isSelected: boolean }>`
   .tab-icon {
     opacity: ${props => props.$isSelected ? 1 : 0};
     font-size: 12px;
-    color: ${props => props.$isSelected ? '#fff' : '#999'};
+    color: ${props => props.$isSelected ? 'var(--text-color)' : '#999'};
     display: flex;
     align-items: center;
     margin-left: 8px;
   }
   
   .tab-key {
-    border: 1px solid ${props => props.$isSelected ? '#fff' : '#666'};
+    border: 1px solid ${props => props.$isSelected ? 'var(--text-color)' : '#666'};
     border-radius: 3px;
     padding: 1px 4px;
     font-size: 10px;
@@ -365,7 +367,7 @@ const InputContainer = styled.div<InputContainerProps>`
   box-sizing: border-box;
   position: relative;
   width: 100%;
-  overflow: hidden;
+  overflow: visible;
 `;
 
 const Prompt = styled.span`
@@ -755,19 +757,20 @@ const App: React.FC = () => {
       originalInput: string,
       lastWord: string
     }) => {
+      console.log('Tab complete result received:', data);
       if (data.matches.length === 0) {
         setShowAutocomplete(false);
         return;
       }
       
       if (data.matches.length === 1) {
-        
         applyAutocomplete(data.matches[0]);
       } else {
-        
+        console.log('Setting autocomplete matches:', data.matches.length);
         setAutocompleteMatches(data.matches);
         setSelectedAutocompleteIndex(0);
         setShowAutocomplete(true);
+        console.log('showAutocomplete set to true');
       }
     };
     
@@ -944,6 +947,10 @@ const App: React.FC = () => {
       setUnreadOutput(false);
     }
   }, [expanded]);
+
+  useEffect(() => {
+    console.log('showAutocomplete state changed:', showAutocomplete, 'matches:', autocompleteMatches.length);
+  }, [showAutocomplete, autocompleteMatches]);
 
   return (
     <>

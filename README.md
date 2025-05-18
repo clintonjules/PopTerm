@@ -7,35 +7,29 @@ A modern, minimal popup terminal interface built with Electron, React, and TypeS
 - Clean, minimal UI with just a command input
 - Output is only shown when needed and can be expanded/collapsed
 - Compact, transparent, borderless window that can be dragged anywhere
-- Native menu integration across all platforms
-- Dark and light mode support with system theme detection and real-time synchronization
+- Dark and light mode support with system theme detection
 - Tab completion for commands and file paths
 - Command history navigation with arrow keys
-- Configurable settings with instant application
+- Configurable settings
 - Global shortcut to toggle the terminal window visibility
 - Remembers last window position within a session
 - Cross-platform compatibility (macOS support, Linux and Windows coming soon)
+- Zoom in/out functionality for better readability
+- Remembers current working directory between commands
 
 ## Settings
 
 PopTerm offers a settings window where you can customize:
 
 - Theme (Light, Dark, or System)
-- Window Position (9 different positions on screen)
-- Global Shortcut (customizable keyboard combination)
+- Show/hide settings icon in terminal
 
-All settings are applied instantly without requiring a save button. The theme is always synchronized between all application windows in real-time.
-
-Access the settings through:
-- The PopTerm menu in the menu bar (Preferences option)
-- Keyboard shortcut: Cmd+, (macOS) or Ctrl+, (Linux/Windows)
+All settings are saved automatically between sessions.
 
 ## Keyboard Shortcuts
 
-- **Cmd/Ctrl+,**: Open settings
-- **Cmd/Ctrl+K**: Clear terminal
 - **Cmd/Ctrl+T**: Toggle terminal window (show/hide)
-- **Cmd/Ctrl+Q**: Quit the application
+- **Cmd/Ctrl+K**: Clear terminal
 - **Cmd/Ctrl+O**: Toggle output display
 - **Cmd/Ctrl+=**: Zoom in
 - **Cmd/Ctrl+-**: Zoom out
@@ -48,9 +42,11 @@ Access the settings through:
 
 ## Usage
 
-- Only one terminal window is active at a time. Toggling the terminal will show or hide this window.
-- The window always reappears at the last position it was hidden during the session.
-- The terminal window is always on top and can be quickly accessed from anywhere using the global shortcut.
+- Type a command and press Enter to execute it
+- Press Tab for autocomplete suggestions
+- Use the arrow button to expand/collapse the output area
+- Click the gear icon to access settings
+- The terminal handles directory changes (`cd` commands) and maintains context between commands
 
 ## Development
 
@@ -110,7 +106,5 @@ PopTerm provides a simple interface to your system's native terminal:
 - Built with Electron for cross-platform desktop capabilities
 - React with TypeScript for UI components and type safety
 - Styled Components for theming and styling
-- IPC communication between Electron main and renderer processes for real-time theme synchronization
-- Native menu integration across all supported platforms
-- Platform-specific optimizations for macOS, Linux, and Windows
-- Global shortcut registration for quick access from anywhere
+- IPC communication between Electron main and renderer processes
+- Tab completion with visual dropdown menu using subtle grey highlighting
