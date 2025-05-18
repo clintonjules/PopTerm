@@ -1,6 +1,6 @@
 # PopTerm
 
-A modern, minimal popup terminal interface built with Electron, React, and TypeScript, designed for macOS, Linux, and Windows.
+A modern, minimal popup terminal interface built with Electron, React, and TypeScript, currently available for macOS with Linux and Windows support coming soon.
 
 ## Features
 
@@ -14,7 +14,7 @@ A modern, minimal popup terminal interface built with Electron, React, and TypeS
 - Configurable settings with instant application
 - Global shortcut to toggle the terminal window visibility
 - Remembers last window position within a session
-- Cross-platform compatibility (macOS, Linux, Windows)
+- Cross-platform compatibility (macOS support, Linux and Windows coming soon)
 
 ## Settings
 
@@ -93,7 +93,7 @@ To package the application for distribution:
 npm run package
 ```
 
-This will create distributables for macOS, Windows, and Linux in the `dist` directory.
+This will create distributables for macOS  (Windows and Linu coming soon) in the `dist` directory.
 
 ## How It Works
 

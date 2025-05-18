@@ -17,7 +17,7 @@
     "minimal",
     "popup"
   ],
-  "author": "Clinton Jules",
+  "author": "Clinton Jules <clintonjules@protonmail.com>",
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.2.0",
     "@typescript-eslint/parser": "^7.2.0",
