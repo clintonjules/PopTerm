@@ -568,11 +568,9 @@ const App: React.FC = () => {
       setSettings(newSettings);
     };
     
-    // Add handler for real-time theme changes
     const handleThemeChanged = (_: any, newTheme: string) => {
       setSettings(prev => ({ ...prev, theme: newTheme as Theme }));
       
-      // Also save to localStorage to persist the change
       try {
         const savedSettings = localStorage.getItem('popterm-settings');
         if (savedSettings) {
@@ -585,7 +583,6 @@ const App: React.FC = () => {
       }
     };
     
-    // Handle system theme changes
     const handleSystemThemeChanged = (_: any, newSystemTheme: 'light' | 'dark') => {
       setSystemTheme(newSystemTheme);
     };

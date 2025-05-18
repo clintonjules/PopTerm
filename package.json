@@ -8,7 +8,7 @@
     "watch": "webpack --config webpack.config.js --watch",
     "start": "npm run build && node electron-main.js .",
     "dev": "concurrently \"npm run watch\" \"node electron-main.js .\"",
-    "package": "npm run build && node build/package.js"
+    "package": "npm run build && electron-builder"
   },
   "keywords": [
     "terminal",
@@ -29,6 +29,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.0",
     "html-webpack-plugin": "^5.6.3",
+    "png-to-ico": "^2.1.8",
     "style-loader": "^3.3.3",
     "ts-loader": "^9.5.1",
     "webpack": "^5.90.3",
@@ -48,6 +49,7 @@
     "productName": "PopTerm",
     "files": [
       "dist/**/*",
+      "dist/assets/**/*",
       "public/**/*"
     ],
     "extraResources": [

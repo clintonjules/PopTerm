@@ -100,11 +100,15 @@ function loadSettings() {
 
 function saveSettings(settings: any) {
   try {
+    const positionChanged = settings.position !== appSettings.position;
+    
     fs.writeFileSync(path.join(app.getPath('userData'), 'settings.json'), JSON.stringify(settings));
     appSettings = { ...settings };
-    if (mainWindow) {
+    
+    if (mainWindow && mainWindow.isVisible() && positionChanged) {
       positionWindow(mainWindow);
     }
+    
     registerGlobalShortcut();
   } catch (error) {
     console.error('Failed to save settings:', error);
@@ -188,6 +192,8 @@ function createWindow() {
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
     }
     positionWindow(mainWindow);
+    
+    lastWindowPosition = { x: mainWindow.getPosition()[0], y: mainWindow.getPosition()[1] };
   }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
@@ -231,6 +237,7 @@ function toggleTerminalWindow(): BrowserWindow {
       const point = screen.getCursorScreenPoint();
       const currentDisplay = screen.getDisplayNearestPoint(point);
       const screenBounds = currentDisplay.workArea;
+      
       if (lastWindowPosition.x >= screenBounds.x && 
           lastWindowPosition.x <= screenBounds.x + screenBounds.width - DEFAULT_WIDTH &&
           lastWindowPosition.y >= screenBounds.y && 
@@ -242,12 +249,14 @@ function toggleTerminalWindow(): BrowserWindow {
     } else {
       positionWindow(mainWindow);
     }
+    
     if (process.platform === 'darwin') {
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
     } else {
       mainWindow.setAlwaysOnTop(true, 'screen-saver');
     }
+    
     const isDarkTheme = appSettings.theme === 'dark' || 
                        (appSettings.theme === 'system' && nativeTheme.shouldUseDarkColors);
     mainWindow.webContents.send('theme-changed', appSettings.theme);
@@ -534,11 +543,21 @@ app.whenReady().then(() => {
   let icon;
   try {
     icon = nativeImage.createFromPath(iconPath);
+    
+
+    if (process.platform === 'darwin') {
+      icon = icon.resize({ width: 16, height: 16 });
+      icon.setTemplateImage(true);
+    }
+    
     if (icon.isEmpty()) {
       console.warn(`Tray icon file is empty or not found at ${iconPath}.`);
       if (process.platform === 'darwin') {
         console.log('Attempting to use a macOS system template image as fallback for tray.');
         icon = nativeImage.createFromNamedImage('NSTouchBarUser');
+
+        icon = icon.resize({ width: 16, height: 16 });
+        icon.setTemplateImage(true);
       }
       if (icon.isEmpty()) {
         console.error('Failed to load tray icon and macOS fallback. Tray icon will be invisible or default.');
@@ -549,6 +568,9 @@ app.whenReady().then(() => {
     console.error('Error creating tray icon from path:', error);
     if (process.platform === 'darwin') {
         icon = nativeImage.createFromNamedImage('NSTouchBarUser');
+
+        icon = icon.resize({ width: 16, height: 16 });
+        icon.setTemplateImage(true);
     }
     if (!icon || icon.isEmpty()) {
         icon = nativeImage.createEmpty();

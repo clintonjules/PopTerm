@@ -20,6 +20,13 @@ module.exports = [
     resolve: {
       extensions: ['.ts', '.js']
     },
+    plugins: [
+      new CopyWebpackPlugin({
+        patterns: [
+          { from: './src/main/assets', to: './assets' }
+        ]
+      })
+    ],
     devtool: 'source-map'
   },
   {
